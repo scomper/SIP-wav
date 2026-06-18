@@ -1,4 +1,4 @@
-"""CLI 入口 — sipwav 命令行工具"""
+"""CLI 入口 — sipcheck 命令行工具"""
 
 import argparse
 import json
@@ -45,7 +45,7 @@ def _check_python_env():
 
     常见问题：
     1. pip install --break-system-packages 装到系统 Python，venv 里找不到模块
-    2. /opt/homebrew/bin/sipwav 残留脚本指向系统 Python
+    2. /opt/homebrew/bin/sipcheck 残留脚本指向系统 Python
     3. venv 未激活，用的是系统 Python
     """
     exe = pathlib.Path(sys.executable)
@@ -59,7 +59,7 @@ def _check_python_env():
         script_dir = script.parent
         # 如果脚本在 /opt/homebrew/bin 但 Python 在 .venv → 冲突
         if 'opt/homebrew' in str(script_dir) and running_in_venv:
-            print("⚠️  sipwav 脚本指向系统 Python，但当前是 venv")
+            print("⚠️  sipcheck 脚本指向系统 Python，但当前是 venv")
             print(f"   脚本: {script}")
             print(f"   Python: {exe}")
             print(f"   修复: rm {script} && pip install -e .")
@@ -72,9 +72,9 @@ def _check_python_env():
         pkg_dir = pathlib.Path(sipwav.__file__).parent
         # 包路径应该在 site-packages 里
         if 'site-packages' not in str(pkg_dir):
-            print(f"⚠️  sipwav 包路径异常: {pkg_dir}")
+            print(f"⚠️  sipcheck 包路径异常: {pkg_dir}")
     except ImportError:
-        print("❌ 无法导入 sipwav 包")
+        print("❌ 无法导入 sipcheck 包")
         if running_in_venv:
             print(f"   Python: {exe}")
             print(f"   修复: pip install -e .")
@@ -85,8 +85,8 @@ def _check_python_env():
         return False
 
     # 检查 3：系统目录残留
-    homebrew_sipwav = pathlib.Path("/opt/homebrew/bin/sipwav")
-    if homebrew_sipwav.exists() and running_in_venv:
+    homebrew_sipcheck = pathlib.Path("/opt/homebrew/bin/sipcheck")
+    if homebrew_sipcheck.exists() and running_in_venv:
         # 不报错，但 doctor 会提示
         pass
 
@@ -103,7 +103,7 @@ def _check_python_env_quiet():
 
     # 严重问题：脚本指向系统但我们在 venv
     if script and 'opt/homebrew' in str(script.parent) and running_in_venv:
-        print(f"⚠️  环境冲突: sipwav 脚本在 /opt/homebrew/bin 但 Python 在 venv")
+        print(f"⚠️  环境冲突: sipcheck 脚本在 /opt/homebrew/bin 但 Python 在 venv")
         print(f"   修复: rm {script} && pip install -e .")
         print()
         return
@@ -113,7 +113,7 @@ def _check_python_env_quiet():
         import sipwav
     except ImportError:
         if running_in_venv:
-            print(f"❌ sipwav 未安装到当前 venv ({exe})")
+            print(f"❌ sipcheck 未安装到当前 venv ({exe})")
             print(f"   修复: pip install -e .")
         else:
             print(f"❌ 未在 venv 中运行 ({exe})")
@@ -134,7 +134,7 @@ def cmd_doctor(args):
     except ImportError:
         pass
 
-    print("🔬 sipwav 环境诊断")
+    print("🔬 sipcheck 环境诊断")
     print("=" * 50)
 
     # 1. Python 环境
@@ -170,8 +170,8 @@ def cmd_doctor(args):
             print(f"      source .venv/bin/activate")
             print(f"      或直接用: {local_venv}")
 
-    # 2. sipwav 包
-    print(f"\n📦 sipwav 包")
+    # 2. sipcheck 包
+    print(f"\n📦 sipcheck 包")
     if pkg_dir:
         print(f"   路径: {pkg_dir}")
         in_site = 'site-packages' in str(pkg_dir)
@@ -187,15 +187,15 @@ def cmd_doctor(args):
     script = pathlib.Path(sys.argv[0]).resolve() if sys.argv[0] else None
     if script and str(script) != '-c':
         print(f"   路径: {script}")
-        # 检查是否有多个 sipwav
-        which_results = shutil.which('sipwav')
+        # 检查是否有多个 sipcheck
+        which_results = shutil.which('sipcheck')
         if which_results:
             print(f"   which: {which_results}")
 
     # 检查系统目录残留
     stale_paths = [
-        pathlib.Path("/opt/homebrew/bin/sipwav"),
-        pathlib.Path("/usr/local/bin/sipwav"),
+        pathlib.Path("/opt/homebrew/bin/sipcheck"),
+        pathlib.Path("/usr/local/bin/sipcheck"),
     ]
     stale_found = []
     for p in stale_paths:
@@ -275,7 +275,7 @@ def cmd_doctor(args):
     if not running_in_venv:
         print(f"   1. 创建并激活 venv:")
         print(f"      python3 -m venv .venv && source .venv/bin/activate")
-        print(f"   2. 安装 sipwav:")
+        print(f"   2. 安装 sipcheck:")
         print(f"      pip install -e .")
         print(f"      # 或完整安装: pip install -e '.[full]'")
     elif not pkg_dir:
@@ -598,7 +598,7 @@ def cmd_task(args):
             tm.mark_done(task, fpath, entry["verdict"], entry["flags"], entry.get("elapsed_s", 0))
 
     # 报告
-    results_path = os.path.join(work_dir, "sipwav_report.json")
+    results_path = os.path.join(work_dir, "sipcheck_report.json")
     report.save_json_report(combined, len(files), results_path)
     tm.complete_task(task, results_path)
 
@@ -862,7 +862,7 @@ def _resolve_sample(user_input: str, work_dir: str) -> str | None:
 
     查找顺序：
     1. 完整路径（用户输入了绝对路径）
-    2. 项目 sample/ 目录（sipwav 自带测试样本）
+    2. 项目 sample/ 目录（sipcheck 自带测试样本）
     3. 工作目录（用户指定的录音目录）
     """
     import pathlib
@@ -995,10 +995,10 @@ def _interactive_resume():
     search_dirs = []
     for d in pathlib.Path.home().iterdir():
         if d.is_dir() and not d.name.startswith('.'):
-            task_file = d / ".sipwav_task.json"
+            task_file = d / ".sipcheck_task.json"
             if task_file.exists():
                 search_dirs.append(str(d))
-    cwd_task = pathlib.Path.cwd() / ".sipwav_task.json"
+    cwd_task = pathlib.Path.cwd() / ".sipcheck_task.json"
     if cwd_task.exists():
         search_dirs.insert(0, str(pathlib.Path.cwd()))
 
@@ -1009,7 +1009,7 @@ def _interactive_resume():
     # 显示任务详情
     print()
     for i, d in enumerate(search_dirs, 1):
-        task_file = pathlib.Path(d) / ".sipwav_task.json"
+        task_file = pathlib.Path(d) / ".sipcheck_task.json"
         try:
             with open(task_file) as f:
                 task = json.load(f)
@@ -1033,7 +1033,7 @@ def _interactive_resume():
         if 0 <= idx < len(search_dirs):
             import argparse as _ap
             # 读取原任务配置，恢复完整参数
-            task_file = pathlib.Path(search_dirs[idx]) / ".sipwav_task.json"
+            task_file = pathlib.Path(search_dirs[idx]) / ".sipcheck_task.json"
             with open(task_file) as f:
                 old_task = json.load(f)
             cfg = old_task.get("config", {})
@@ -1061,21 +1061,21 @@ def main():
     _check_python_env_quiet()
 
     parser = argparse.ArgumentParser(
-        prog="sipwav",
+        prog="sipcheck",
         description="SIP-wav 语音异常检测工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 用法:
-  sipwav                    交互模式（引导选择）
-  sipwav task --dir ./录音   命令行模式
-  sipwav doctor             环境诊断
+  sipcheck                    交互模式（引导选择）
+  sipcheck task --dir ./录音   命令行模式
+  sipcheck doctor             环境诊断
 
 示例:
-  sipwav task --dir ./录音/ --sample ref.wav
-  sipwav task --dir ./录音/ --silence 2
-  sipwav info 异常.wav
-  sipwav view 异常.wav -d 60 --open
-  sipwav gen "您的验证码是123456" --output ref.wav
+  sipcheck task --dir ./录音/ --sample ref.wav
+  sipcheck task --dir ./录音/ --silence 2
+  sipcheck info 异常.wav
+  sipcheck view 异常.wav -d 60 --open
+  sipcheck gen "您的验证码是123456" --output ref.wav
         """,
     )
     # 加载 .env 文件（如存在）

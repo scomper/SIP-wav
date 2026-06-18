@@ -15,7 +15,7 @@ class TaskManager:
 
     def __init__(self, work_dir: str):
         self.work_dir = work_dir
-        self.task_file = os.path.join(work_dir, ".sipwav_task.json")
+        self.task_file = os.path.join(work_dir, ".sipcheck_task.json")
         os.makedirs(work_dir, exist_ok=True)
 
     # ─── 任务文件读写 ────────────────────────────────────────

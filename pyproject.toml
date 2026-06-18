@@ -36,4 +36,4 @@ server = [
 Homepage = "https://github.com/scomper/SIP-wav"
 
 [project.scripts]
-sipwav = "sipwav.cli:main"
+sipcheck = "sipwav.cli:main"

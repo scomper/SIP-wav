@@ -59,35 +59,37 @@ L3 ASR 确认 (funasr 本地 / 阿里云, ~15s/60s 录音)
 
 ```bash
 git clone https://github.com/scomper/SIP-wav.git
-cd SIP-wav
+cd SIP-wav                              # ⚠️ 必须在项目根目录，不要 cd 进 sipwav/ 子目录
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[full]"
 ```
+
+> **⚠️ 常见错误**：项目根目录下有个 `sipwav/` 子目录（Python 包），`pip install` 必须在根目录执行。如果你已经在 `sipwav/` 子目录里，先 `cd ..` 回到根目录。
 
 ### 基本使用
 
 ```bash
 # 交互模式（引导选择）
-sipwav
+sipcheck
 
 # 命令行：L1 波形检测
-sipwav task --dir ./录音/
+sipcheck task --dir ./录音/
 
 # 命令行：全管线（L1 + L2 + L3）
-sipwav task --dir ./录音/ --sample 参考.wav --silence 2
+sipcheck task --dir ./录音/ --sample 参考.wav --silence 2
 ```
 
 ## 命令一览
 
 | 命令 | 功能 |
 |------|------|
-| `sipwav` | 交互模式（选模式 → 输目录 → 自动跑） |
-| `sipwav doctor` | 环境诊断 |
-| `sipwav task --dir ./录音/` | 任务模式（支持断点续跑） |
-| `sipwav scan --dir ./录音/` | 简单批量扫描 |
-| `sipwav info 文件.wav` | 查看单文件详情 |
-| `sipwav view 文件.wav -d 60 --open` | 波形标记 SVG 可视化 |
-| `sipwav gen "文本内容" --output ref.wav` | TTS 生成参考语音 |
+| `sipcheck` | 交互模式（选模式 → 输目录 → 自动跑） |
+| `sipcheck doctor` | 环境诊断 |
+| `sipcheck task --dir ./录音/` | 任务模式（支持断点续跑） |
+| `sipcheck scan --dir ./录音/` | 简单批量扫描 |
+| `sipcheck info 文件.wav` | 查看单文件详情 |
+| `sipcheck view 文件.wav -d 60 --open` | 波形标记 SVG 可视化 |
+| `sipcheck gen "文本内容" --output ref.wav` | TTS 生成参考语音 |
 
 ### 常用参数
 
@@ -122,8 +124,8 @@ pip install -e ".[server]"
 
 使用时指定 `--asr-mode aliyun`：
 ```bash
-sipwav scan --dir ./录音/ --asr --asr-mode aliyun
-sipwav scan --dir ./录音/ --sample ref.wav --asr --asr-mode aliyun
+sipcheck scan --dir ./录音/ --asr --asr-mode aliyun
+sipcheck scan --dir ./录音/ --sample ref.wav --asr --asr-mode aliyun
 ```
 
 > 环境检测会自动选择推荐模式（无 funasr 时自动切 aliyun）。
@@ -155,14 +157,17 @@ echo "DASHSCOPE_API_KEY=sk-ws-你的Key" > .env
 ## 故障排除
 
 ```bash
-sipwav doctor   # 遇到问题先跑这个
+sipcheck doctor   # 遇到问题先跑这个
 ```
 
 | 问题 | 解决 |
 |------|------|
+| `does not appear to be a Python project` | 当前在 `sipwav/` 子目录，`cd ..` 回到项目根目录再执行 |
+| `command not found: sipcheck` | 未安装或 venv 未激活，`source .venv/bin/activate && pip install -e .` |
 | venv 未生效 | `unalias python && source .venv/bin/activate` |
 | ModuleNotFoundError | `pip install -e .` 重装 |
 | No module named 'funasr' | 用 `--asr-mode aliyun`，轻量部署不需要 funasr |
+| No module named 'librosa' | 轻量部署：`pip install -e ".[server]"`，或全量：`pip install -e ".[full]"` |
 | venv 卡死（import 超时） | `rm -ri .venv && python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[server]"` |
 | 彻底重来 | `rm -ri .venv && python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[full]"` |
 

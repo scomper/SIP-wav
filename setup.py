@@ -2,12 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="sipwav",
-    version="0.1.1",
+    version="0.1.2",
     packages=find_packages(),
     include_package_data=True,
     entry_points={
         "console_scripts": [
-            "sipwav=sipwav.cli:main",
+            "sipcheck=sipwav.cli:main",
         ],
     },
     python_requires=">=3.10",
