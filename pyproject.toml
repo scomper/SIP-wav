@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sipwav"
+version = "0.1.2"
+description = "SIP 语音异常检测 — 波形分析 + 样本比对 + ASR 时间轴"
+authors = [{ name = "scomper" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "webrtcvad>=2.0",
+    "soundfile>=0.12",
+    "setuptools>=68,<81",  # pkg_resources（webrtcvad 依赖，82+ 已移除）
+]
+
+[project.optional-dependencies]
+full = [
+    "librosa>=0.10",
+    "torch>=2.0",
+    "torchaudio>=2.0",  # funasr 依赖
+    "funasr>=1.0",
+    "modelscope>=1.0",
+    "dashscope>=1.20",
+]
+server = [
+    "librosa>=0.10",
+    "dashscope>=1.20",
+    "httpx>=0.24",
+]
+
+[project.urls]
+Homepage = "https://github.com/scomper/SIP-wav"
+
+[project.scripts]
+sipwav = "sipwav.cli:main"

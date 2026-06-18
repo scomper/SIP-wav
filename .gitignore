@@ -1,0 +1,11 @@
+# SIP-wav .gitignore
+.env
+output/
+*.pyc
+__pycache__/
+.venv/
+.venv*/
+.alma-snapshots/
+.DS_Store
+*.egg-info/
+sipwav.egg-info/
