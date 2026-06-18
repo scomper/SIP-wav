@@ -124,6 +124,14 @@ pip install -e ".[server]"
 echo "DASHSCOPE_API_KEY=sk-ws-..." > .env
 ```
 
+> **获取 API Key 步骤**：
+> 1. 登录 [阿里云百炼控制台](https://bailian.console.aliyun.com/)
+> 2. 左侧菜单 → **API Key 管理** → **创建 API Key**
+> 3. 复制生成的 Key（格式 `sk-ws-...`）
+> 4. 填入项目根目录的 `.env` 文件
+>
+> **定价参考**：Paraformer 模型 ¥0.003/秒（约 ¥0.18/分钟），新用户有免费额度
+
 使用时指定 `--asr-mode aliyun`：
 ```bash
 sipwav scan --dir ./录音/ --asr --asr-mode aliyun
