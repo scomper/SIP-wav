@@ -58,30 +58,21 @@ def _get_phrase_id(api_key: str) -> str | None:
         return _PHRASE_ID
 
     try:
-        import httpx
-        # 查询已有热词列表
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        list_resp = httpx.post(
-            "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/phrase-management",
-            headers=headers,
-            json={"action": "list", "model": ASR_MODEL, "page_no": 1, "page_size": 10},
-            timeout=15,
-        )
-        if list_resp.status_code == 200:
-            outputs = list_resp.json().get("output", {}).get("finetuned_outputs", [])
-            if outputs:
-                _PHRASE_ID = outputs[0].get("finetuned_output", "")
-                return _PHRASE_ID
+        import dashscope
+        from dashscope.audio.asr import AsrPhraseManager
+        dashscope.api_key = api_key
 
-        # 没有热词表，创建一个
-        create_resp = httpx.post(
-            "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/phrase-management",
-            headers=headers,
-            json={"action": "create", "model": ASR_MODEL, "phrases": DEFAULT_HOTWORDS, "training_type": "compile_asr_phrase"},
-            timeout=15,
-        )
-        if create_resp.status_code == 200:
-            _PHRASE_ID = create_resp.json().get("output", {}).get("finetuned_output", "")
+        # 查询已有热词
+        result = AsrPhraseManager.list_phrases(model=ASR_MODEL)
+        outputs = result.output.get("finetuned_outputs", []) if result.output else []
+        if outputs:
+            _PHRASE_ID = outputs[0].get("finetuned_output", "")
+            return _PHRASE_ID
+
+        # 没有则创建
+        result = AsrPhraseManager.create_phrases(model=ASR_MODEL, phrases=DEFAULT_HOTWORDS)
+        if result.output and hasattr(result.output, "finetuned_output"):
+            _PHRASE_ID = result.output.finetuned_output
             return _PHRASE_ID
     except Exception:
         pass
