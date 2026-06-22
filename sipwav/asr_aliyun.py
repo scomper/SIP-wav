@@ -38,6 +38,56 @@ def _get_api_key() -> str:
     return ""
 
 
+# ─── 热词管理 ─────────────────────────────────────────────────
+
+# 默认热词：数字 1-10 + 常见电话术语（权重 5 = 最高）
+DEFAULT_HOTWORDS = {
+    "一": 5, "二": 5, "三": 5, "四": 5, "五": 5,
+    "六": 5, "七": 5, "八": 5, "九": 5, "十": 5,
+    "零": 5, "百": 3, "千": 3, "万": 3,
+    "确认": 3, "取消": 3, "转接": 3, "人工": 3,
+}
+
+_PHRASE_ID = None  # 缓存热词 ID
+
+
+def _get_phrase_id(api_key: str) -> str | None:
+    """获取或创建热词表，返回 phrase_id"""
+    global _PHRASE_ID
+    if _PHRASE_ID is not None:
+        return _PHRASE_ID
+
+    try:
+        import httpx
+        # 查询已有热词列表
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        list_resp = httpx.post(
+            "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/phrase-management",
+            headers=headers,
+            json={"action": "list", "model": ASR_MODEL, "page_no": 1, "page_size": 10},
+            timeout=15,
+        )
+        if list_resp.status_code == 200:
+            outputs = list_resp.json().get("output", {}).get("finetuned_outputs", [])
+            if outputs:
+                _PHRASE_ID = outputs[0].get("finetuned_output", "")
+                return _PHRASE_ID
+
+        # 没有热词表，创建一个
+        create_resp = httpx.post(
+            "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/phrase-management",
+            headers=headers,
+            json={"action": "create", "model": ASR_MODEL, "phrases": DEFAULT_HOTWORDS, "training_type": "compile_asr_phrase"},
+            timeout=15,
+        )
+        if create_resp.status_code == 200:
+            _PHRASE_ID = create_resp.json().get("output", {}).get("finetuned_output", "")
+            return _PHRASE_ID
+    except Exception:
+        pass
+    return None
+
+
 def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
     """阿里云百炼 ASR 转写
 
@@ -106,12 +156,16 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
             if not file_url:
                 return {"text": "", "error": "获取下载 URL 失败", "provider": "aliyun"}
 
-            # Step 4: 提交转写
+            # Step 4: 提交转写（Paraformer 带热词）
             _progress(f"    提交转写 ({ASR_MODEL})...")
             if "qwen3" in ASR_MODEL:
                 task_body = {"model": ASR_MODEL, "input": {"file_url": file_url}}
             else:
                 task_body = {"model": ASR_MODEL, "input": {"file_urls": [file_url]}}
+                # Paraformer 热词
+                phrase_id = _get_phrase_id(api_key)
+                if phrase_id:
+                    task_body["parameters"] = {"phrase_id": phrase_id}
 
             submit_resp = httpx.post(
                 "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription",
