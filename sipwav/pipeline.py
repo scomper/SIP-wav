@@ -376,19 +376,26 @@ class Pipeline:
     # ─── ASR 预估 ─────────────────
 
     def get_asr_candidates(self) -> list[tuple[str, float]]:
-        """返回 Phase 3 的候选文件列表 (path, duration_s)，用于预估 ASR 时间"""
-        candidates = [f for f in self.l1_results if f not in self.errors and f not in self.filtered_files]
-        if self.l2_results:
-            candidates = [
-                f for f in candidates
-                if f not in self.l2_results or not self.l2_results[f].get("flags")
-            ]
-        result = []
-        for fpath in candidates:
-            r = self.l1_results[fpath]
+        """返回 Phase 3 的候选文件列表 (path, duration_s)
+
+        过滤条件：
+        1. 排除 L1 异常文件（波形筛查不通过）
+        2. 排除 L2 有 flags 的文件（样本比对不通过）
+        3. 排除被预过滤和出错的文件
+        """
+        candidates = []
+        for fpath, r in self.l1_results.items():
+            # L1 异常 → 不进 ASR
+            if r.get("l1", {}).get("verdict") == "abnormal":
+                continue
+            if fpath in self.errors or fpath in self.filtered_files:
+                continue
+            # L2 有 flags → 不进 ASR
+            if fpath in self.l2_results and self.l2_results[fpath].get("flags"):
+                continue
             dur = len(r["y"]) / r["sr"]
-            result.append((fpath, dur))
-        return result
+            candidates.append((fpath, dur))
+        return candidates
 
     def estimate_asr_time(self) -> dict:
         """预估 ASR 分析耗时
