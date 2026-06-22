@@ -114,29 +114,43 @@ def format_report(results: list[dict], total: int, time_s: float,
         lines.append("")
 
     # ─── 模式 C — L3 ASR 内容 ───
-    l3_abnormal = [r for r in results if (r.get("l3") or {}).get("flags")]
-    if l3_abnormal:
+    l3_files = [r for r in results if r.get("l3")]
+    if l3_files:
         lines.append(f"  {'━' * 68}")
-        lines.append(f"  模式 C — ASR 内容检测 (吞字 / 多余 / 不匹配 / 无语音)")
+        lines.append(f"  模式 C — ASR 内容检测")
         lines.append(f"  {'━' * 68}")
-        for r in l3_abnormal:
+        for r in l3_files:
             basename = os.path.basename(r.get("file", ""))
             dur = r.get("duration_s")
             dur_str = f"{dur:.0f}s" if dur else "?"
             l3 = r["l3"]
             flags = l3.get("flags", [])
-            desc = _flag_desc(flags)
-            diff = l3.get("diff", {})
-            if diff.get("similarity") is not None:
-                desc += f" | 相似度 {diff['similarity']:.2f}"
-            if diff.get("missing"):
-                desc += f" | 缺: {diff['missing'][:30]}"
-            if diff.get("extra"):
-                desc += f" | 多: {diff['extra'][:30]}"
-            drift = l3.get("drift", {})
-            if drift.get("total_drift", 0) > 0:
-                desc += f" | 漂移 {drift['total_drift']} 处"
-            lines.append(f"  ⚠️  {basename[:28]:28s}  {dur_str:>6s}  {desc}")
+            transcribed = l3.get("transcribed", {})
+            asr_text = transcribed.get("text", "")
+
+            if flags:
+                desc = _flag_desc(flags)
+                diff = l3.get("diff", {})
+                if diff.get("similarity") is not None:
+                    desc += f" | 相似度 {diff['similarity']:.2f}"
+                if diff.get("missing"):
+                    desc += f" | 缺: {diff['missing'][:30]}"
+                if diff.get("extra"):
+                    desc += f" | 多: {diff['extra'][:30]}"
+                drift = l3.get("drift", {})
+                if drift.get("total_drift", 0) > 0:
+                    desc += f" | 漂移 {drift['total_drift']} 处"
+                lines.append(f"  ⚠️  {basename[:28]:28s}  {dur_str:>6s}  {desc}")
+            else:
+                diff = l3.get("diff", {})
+                sim = diff.get("similarity", 0)
+                lines.append(f"  ✅  {basename[:28]:28s}  {dur_str:>6s}  相似度 {sim:.2f}")
+
+            # 展示 ASR 识别内容节选
+            if asr_text:
+                excerpt = asr_text[:100]
+                suffix = "..." if len(asr_text) > 100 else ""
+                lines.append(f"       ASR: [{excerpt}{suffix}]")
         lines.append("")
 
     # ─── 失败文件 ───

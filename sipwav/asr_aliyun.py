@@ -154,10 +154,19 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
             if not file_url:
                 return {"text": "", "error": "获取下载 URL 失败", "provider": "aliyun"}
 
-            # Step 4: 提交转写（Paraformer 带热词）
+            # Step 4: 提交转写（Qwen3 / Paraformer 各自参数）
             _progress(f"    提交转写 ({ASR_MODEL})...")
             if "qwen3" in ASR_MODEL:
-                task_body = {"model": ASR_MODEL, "input": {"file_url": file_url}}
+                task_body = {
+                    "model": ASR_MODEL,
+                    "input": {"file_url": file_url},
+                    "parameters": {
+                        "channel_id": [0],      # 单声道
+                        "enable_itn": True,      # 数字归一化，"三百五十一"→"351"
+                        "enable_words": True,    # 字级时间戳
+                        "language": "zh",        # 指定中文提升精度
+                    },
+                }
             else:
                 task_body = {"model": ASR_MODEL, "input": {"file_urls": [file_url]}}
                 # Paraformer 热词
