@@ -2,7 +2,10 @@
 
 # 敏感信息
 .env
+.env.*
 *.csv
+api-key
+api-key.*
 
 # 构建产物
 output/
@@ -29,6 +32,9 @@ number.txt
 # 运行时数据
 .sipcheck_task.json
 Users/
+
+# 日志
+*.log
 
 # IDE / 系统
 .alma-snapshots/

@@ -1,5 +1,5 @@
-# Editable install with no version control (sipwav==0.1.0)
--e /Users/scomper/dev/SIP-wav
+# SIP-wav 依赖
+# 注意：不要包含 -e /path/to/local 之类的本地路径
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 PyYAML==6.0.3
