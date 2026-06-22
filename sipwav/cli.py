@@ -462,6 +462,12 @@ def cmd_task(args):
     asr_mode = getattr(args, 'asr_mode', 'auto')
     codec = getattr(args, 'codec', 'auto')
 
+    # 应用 --asr-model 参数
+    asr_model_override = getattr(args, 'asr_model', None)
+    if asr_model_override:
+        from . import asr_aliyun
+        asr_aliyun.ASR_MODEL = asr_model_override
+
     # 编码检测（auto 模式从参考样本或首个文件判断）
     if codec == 'auto' and task["config"]["sample"]:
         try:
@@ -641,6 +647,12 @@ def cmd_scan(args):
     # 加载参考样本（如有）
     ref_profile = ref_vad_segments = ref_asr_text = None
     ref_numbers = []
+
+    # 应用 --asr-model 参数
+    asr_model_override = getattr(args, 'asr_model', None)
+    if asr_model_override:
+        from . import asr_aliyun
+        asr_aliyun.ASR_MODEL = asr_model_override
     sr_ref = 8000
     enable_asr = getattr(args, 'asr', False)
     asr_mode = getattr(args, 'asr_mode', 'auto')
@@ -1160,6 +1172,8 @@ def main():
                         help="启用 ASR 内容分析 (默认开，--no-asr 关闭)")
     p_task.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
+    p_task.add_argument("--asr-model", default=None,
+                        help="云端 ASR 模型: qwen3-asr-flash-filetrans (默认) / paraformer-8k-v2 / fun-asr")
     p_task.add_argument("--phases", "-p", default="123",
                         help="指定管线阶段: 1=L1, 2=L2, 3=L3, 可组合如 12, 23 (默认 123)")
     p_task.add_argument("--codec", choices=["g711", "g729", "auto"], default="auto",
@@ -1179,6 +1193,8 @@ def main():
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
     p_scan.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
+    p_scan.add_argument("--asr-model", default=None,
+                        help="云端 ASR 模型: qwen3-asr-flash-filetrans (默认) / paraformer-8k-v2 / fun-asr")
     p_scan.add_argument("--silence", type=float, default=2.0, metavar="SEC",
                         help="静音检测阈值（秒） (默认 2.0)")
     p_scan.add_argument("--phases", "-p", default="123",

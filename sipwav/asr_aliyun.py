@@ -15,11 +15,19 @@ warnings.filterwarnings("ignore")
 
 # 配置（可通过环境变量覆盖）
 # 可选模型：
-#   qwen3-asr-flash-filetrans — Qwen3-ASR（默认，精度最高，嘈杂/中英混合场景优势大）
+#   qwen3-asr-flash-filetrans — Qwen3-ASR（默认，精度最高，支持任意采样率）
 #   paraformer-8k-v2          — Paraformer（8k 电话录音专用，支持热词）
 #   fun-asr                   — Fun-ASR（工业级，支持热词）
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com"
-ASR_MODEL = os.environ.get("SIPWAV_ASR_MODEL", "paraformer-8k-v2")
+ASR_MODEL = os.environ.get("SIPWAV_ASR_MODEL", "qwen3-asr-flash-filetrans")
+
+# Qwen3-ASR 电话录音优化参数
+QWEN3_PARAMS = {
+    "channel_id": [0],        # 单声道（电话录音）
+    "enable_itn": True,       # 逆文本正则化（中文数字→阿拉伯数字，缩短文本）
+    "enable_words": True,     # 词级时间戳（漂移检测需要）
+    "language": "zh",         # 指定中文（跳过语种检测，提速）
+}
 
 
 def _get_api_key() -> str:
@@ -160,12 +168,7 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
                 task_body = {
                     "model": ASR_MODEL,
                     "input": {"file_url": file_url},
-                    "parameters": {
-                        "channel_id": [0],      # 单声道
-                        "enable_itn": True,      # 数字归一化，"三百五十一"→"351"
-                        "enable_words": True,    # 字级时间戳
-                        "language": "zh",        # 指定中文提升精度
-                    },
+                    "parameters": dict(QWEN3_PARAMS),
                 }
             else:
                 task_body = {"model": ASR_MODEL, "input": {"file_urls": [file_url]}}

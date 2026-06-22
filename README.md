@@ -99,6 +99,7 @@ sipcheck task --dir ./records/ --sample ref.wav --silence 2
 | `--silence 2` | Silence threshold (seconds), default 2.0 |
 | `--asr` | Enable ASR content analysis |
 | `--asr-mode aliyun` | ASR mode: `local` / `aliyun` / `auto` |
+| `--asr-model paraformer-8k-v2` | Cloud ASR model: `qwen3-asr-flash-filetrans` (default) / `paraformer-8k-v2` / `fun-asr` |
 | `-p 1` | L1 waveform screening only |
 | `-p 12` | L1 + L2 sample comparison |
 | `-p 123` | Full pipeline (default) |
@@ -129,6 +130,27 @@ sipcheck scan --dir ./records/ --sample ref.wav --asr --asr-mode aliyun
 ```
 
 > 环境检测会自动选择推荐模式（无 funasr 时自动切 aliyun）。
+
+### ASR Models
+
+| Model | ID | Best For | Hotword | 8kHz |
+|-------|-----|----------|---------|------|
+| **Qwen3-ASR** ⭐ | `qwen3-asr-flash-filetrans` | General, noisy audio, mixed zh/en | ❌ | ✅ |
+| **Paraformer** | `paraformer-8k-v2` | Telephone recordings, hotword support | ✅ | ✅ |
+| **Fun-ASR** | `fun-asr` | Industrial, multi-language | ✅ | ✅ |
+
+Switch model via CLI:
+```bash
+# Use Paraformer (with hotword support)
+sipcheck scan --dir ./records/ --asr-model paraformer-8k-v2
+
+# Use Qwen3 (default, best accuracy)
+sipcheck scan --dir ./records/ --asr-model qwen3-asr-flash-filetrans
+
+# Or via environment variable
+export SIPWAV_ASR_MODEL=paraformer-8k-v2
+sipcheck scan --dir ./records/
+```
 
 ### 阿里云百炼 API Key 配置
 
