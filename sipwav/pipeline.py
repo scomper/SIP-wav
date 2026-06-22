@@ -28,7 +28,7 @@ class Pipeline:
                  max_asr_files: int = 100, asr_sample_size: int = 10,
                  interactive: bool = False, ref_sr: int = 8000):
         from . import features as feat
-        # 排除参考样本（它不参与检测）
+        # 参考样本单独处理（跑 L1 拿基准指标，但不进 L2/L3 检测）
         self.ref_path = ref_path
         self.files = [f for f in files if f != ref_path]
         self.total = len(self.files)
@@ -37,6 +37,7 @@ class Pipeline:
         self.ref_vad_segments = ref_vad_segments
         self.ref_asr_text = ref_asr_text
         self.ref_numbers = ref_numbers or []
+        self.ref_l1 = None  # 参考样本的 L1 分析结果（基准）
         self.enable_asr = enable_asr
         self.asr_mode = asr_mode
         self.phases = phases
@@ -102,10 +103,20 @@ class Pipeline:
 
     def run_phase1(self) -> dict[str, dict]:
         if "1" not in self.phases:
-            print("\n⏭  跳过 Phase 1")
+            print("\n  跳过 Phase 1")
             return {}
         t0 = time.time()
         import numpy as np
+
+        # 参考样本先跑 L1，拿到基准指标
+        if self.ref_path and os.path.exists(self.ref_path):
+            try:
+                y_ref, sr_ref = self.feat.load_wav(self.ref_path)
+                self.ref_l1 = self.feat.layer1_fast_scan(y_ref, sr_ref, self.silence_threshold)
+                self._ref_y = y_ref
+                self._ref_sr_loaded = sr_ref
+            except Exception:
+                self.ref_l1 = None
 
         # 样本预过滤：有参考样本时，排除特征不匹配的文件
         if self.ref_profile:

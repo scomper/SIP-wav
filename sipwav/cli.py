@@ -508,6 +508,19 @@ def cmd_task(args):
                     ref_sr=sr_ref)
 
     pipe.run_phase1()
+
+    # 展示参考样本 L1 基准指标
+    if pipe.ref_l1:
+        rl = pipe.ref_l1
+        re = rl.get("energy", {})
+        rv = rl.get("vad", {})
+        print(f"\n  参考样本基准:")
+        print(f"    RMS均值: {re.get('rms_mean', 0):.4f}  标准差: {re.get('rms_std', 0):.4f}  变化率: {re.get('rms_variation', 0):.3f}")
+        print(f"    语音占比: {rv.get('voiced_ratio', 0):.1%}  静音段: {len(rv.get('silence_gt_threshold', []))} 段")
+        rt = rl.get("tone", {})
+        if rt.get("is_pure_tone"):
+            print(f"    主频: {rt.get('dominant_freqs', [])[0] if rt.get('dominant_freqs') else '?'}Hz (纯音)")
+
     if ref_profile is not None:
         pipe.run_phase2()
 
