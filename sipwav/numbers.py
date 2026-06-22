@@ -253,3 +253,46 @@ def format_drift_report(drift_result: dict) -> str:
         lines.append(f"  ✅ 时间轴一致，无漂移")
 
     return "\n".join(lines)
+
+
+# ─── 自检 ───────────────────────────────────────────────────────
+
+def _selftest():
+    """可运行的核心逻辑检查"""
+    # chinese_to_number
+    assert chinese_to_number("十四") == 14
+    assert chinese_to_number("一百二十三") == 123
+    assert chinese_to_number("一万两千") == 12000
+    assert chinese_to_number("零") == 0
+    assert chinese_to_number("十") == 10
+    assert chinese_to_number("二十") == 20
+    assert chinese_to_number("三百零五") == 305
+    assert chinese_to_number("") == 0
+    # 纯数字逐位
+    assert chinese_to_number("一二三") == 123
+
+    # split_by_timing
+    ts = [[0, 500], [600, 1100]]
+    groups = split_by_timing("十四", ts)
+    assert len(groups) == 1
+    assert groups[0]["arabic"] == 14
+
+    # detect_drift
+    ref = [{"arabic": 14, "start": 0.2}, {"arabic": 20, "start": 10.0}]
+    test = [{"arabic": 14, "start": 0.3}, {"arabic": 20, "start": 10.1}]
+    result = detect_drift(ref, test, threshold=1.0)
+    assert result["aligned"] is True
+    assert result["total_drift"] == 0
+
+    # text_diff
+    from .asr_handler import text_diff
+    assert text_diff("abc", "abc")["similarity"] == 1.0
+    d = text_diff("abc", "axc")
+    assert d["similarity"] < 1.0
+    assert d["has_missing"] is True
+
+    print("  ✅ 自检通过")
+
+
+if __name__ == "__main__":
+    _selftest()

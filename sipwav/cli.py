@@ -326,70 +326,6 @@ def _format_elapsed(s: float) -> str:
     return f"{int(s//60)}m{int(s%60)}s"
 
 
-def _process_file(fpath: str, ref_profile: dict | None = None, ref_vad_segments: list | None = None,
-                  ref_asr_text: str | None = None, enable_asr: bool = False,
-                  asr_mode: str = "auto") -> dict:
-    """处理单个文件：Layer 1 + Layer 2 + Layer 3 (可选 ASR)
-
-    Args:
-        asr_mode: "local" 仅本地, "aliyun" 仅阿里云, "auto" 本地优先+回退
-    """
-    y, sr = feat.load_wav(fpath)
-    l1 = feat.layer1_fast_scan(y, sr)
-    l2 = None
-    l3 = None
-
-    # Layer 1 已经异常且是明确的非语音 → 跳过后续
-    skip_layers = l1.get("flags", []) and (
-        "pure_tone" in l1["flags"] or "likely_no_voice" in l1["flags"]
-    )
-
-    # Layer 2: 样本比对
-    if ref_profile is not None and not skip_layers:
-        test_vad = feat.vad_segments(y, sr)
-        l2 = aligner.layer2_sample_compare(
-            y, sr, ref_profile,
-            test_vad_segments=test_vad.get("segments"),
-            ref_vad_segments=ref_vad_segments,
-        )
-
-    # Layer 3: ASR 内容分析
-    if enable_asr and not skip_layers:
-        if asr_mode == "local":
-            l3 = asr.layer3_asr_check(y, sr, ref_asr_text, use_fallback=False)
-        elif asr_mode == "aliyun":
-            # 仅阿里云：直接调用 asr_aliyun
-            from . import asr_aliyun
-            api_key = asr._get_aliyun_api_key()
-            ali_result = asr_aliyun.transcribe(y, sr, api_key=api_key)
-            l3 = {"transcribed": ali_result}
-            if ref_asr_text and ali_result.get("has_content"):
-                l3["diff"] = asr.text_diff(ref_asr_text, ali_result["text"])
-                flags = []
-                if l3["diff"]["has_missing"]: flags.append("missing_words")
-                if l3["diff"]["has_extra"]: flags.append("extra_words")
-                l3["verdict"] = "abnormal" if flags else "normal"
-                l3["flags"] = flags
-            elif ref_asr_text:
-                l3["verdict"] = "abnormal"
-                l3["flags"] = ["no_speech"]
-            else:
-                l3["verdict"] = "normal"
-                l3["flags"] = []
-        else:  # auto
-            l3 = asr.layer3_asr_check(y, sr, ref_asr_text, use_fallback=True)
-
-    # 合并标记
-    combined_flags = l1.get("flags", [])
-    if l2:
-        combined_flags += l2.get("flags", [])
-    if l3:
-        combined_flags += l3.get("flags", [])
-
-    verdict = "abnormal" if combined_flags else "normal"
-    return {"l1": l1, "l2": l2, "l3": l3, "verdict": verdict, "flags": combined_flags}
-
-
 def _parse_recording_filename(filename: str) -> dict:
     """解析录音文件名中的元数据（主叫/被叫/IP/时间等）
 
@@ -551,7 +487,7 @@ def cmd_task(args):
             print(f"  🔍 ASR 参考文本...")
             if asr_mode == "aliyun":
                 from . import asr_aliyun
-                api_key = asr._get_aliyun_api_key()
+                api_key = asr_aliyun._get_api_key()
                 ref_asr = asr_aliyun.transcribe(y_ref, sr_ref, api_key=api_key)
             else:
                 ref_asr = asr.transcribe(y_ref, sr_ref)
@@ -577,7 +513,8 @@ def cmd_task(args):
                     silence_threshold=silence_threshold,
                     ref_path=sample_path,
                     ref_numbers=ref_numbers if enable_asr else [],
-                    interactive=getattr(args, 'interactive', False))
+                    interactive=getattr(args, 'interactive', False),
+                    ref_sr=sr_ref)
 
     pipe.run_phase1()
     if ref_profile is not None:
@@ -632,18 +569,20 @@ def cmd_status(args):
 
 
 def cmd_scan(args):
-    """简单扫描模式 — 不保留任务状态"""
+    """简单扫描模式 — 不保留任务状态，走 Pipeline"""
     if not _lazy_imports():
         return
     _apply_env_defaults(args)
+    from .pipeline import Pipeline
+
     files = scanner.find_wav_files(args.dir)
     if not files:
         print(f"⚠️  在 {args.dir} 中未找到 WAV 文件")
         return
 
-    ref_profile = None
-    ref_vad_segments = None
-    ref_asr_text = None
+    # 加载参考样本（如有）
+    ref_profile = ref_vad_segments = ref_asr_text = None
+    ref_numbers = []
     enable_asr = getattr(args, 'asr', False)
     asr_mode = getattr(args, 'asr_mode', 'auto')
 
@@ -657,53 +596,41 @@ def cmd_scan(args):
             print(f"   时长: {ref_profile['duration_s']:.1f}s | 能量均值: {ref_profile['rms_mean']:.4f}")
             if enable_asr:
                 print(f"   🔍 提取 ASR 参考文本...")
-                if asr_mode == "aliyun":
-                    from . import asr_aliyun
-                    api_key = asr._get_aliyun_api_key()
-                    ref_asr = asr_aliyun.transcribe(y_ref, sr_ref, api_key=api_key)
-                else:
-                    ref_asr = asr.transcribe(y_ref, sr_ref)
+                ref_asr = asr.transcribe(y_ref, sr_ref)
                 ref_asr_text = ref_asr["text"]
+                ref_numbers = ref_asr.get("numbers", [])
                 print(f"   参考文本: [{ref_asr_text}]")
             print()
         except Exception as e:
             print(f"❌ 参考样本加载失败: {e}")
             return
 
-    print(f"📁 待检: {len(files)} 个文件\n")
-    if enable_asr:
-        print(f"🔊 ASR 内容分析: 已启用\n")
+    print(f"📁 待检: {len(files)} 个文件")
+    phases = getattr(args, 'phases', '123')
+    silence = getattr(args, 'silence', 2.0)
 
-    results = []
+    pipe = Pipeline(files, ref_profile, ref_vad_segments, ref_asr_text,
+                    enable_asr, asr_mode, phases=phases,
+                    silence_threshold=silence,
+                    ref_path=args.sample,
+                    ref_numbers=ref_numbers,
+                    ref_sr=sr_ref)
+
     t0 = time.time()
-
-    for i, fpath in enumerate(files, 1):
-        basename = os.path.basename(fpath)
-        t1 = time.time()
-
-        try:
-            result = _process_file(fpath, ref_profile, ref_vad_segments,
-                                   ref_asr_text, enable_asr, asr_mode)
-            elapsed = time.time() - t1
-            entry = {"file": fpath, **result, "elapsed_s": round(elapsed, 3)}
-            results.append(entry)
-
-            if result["verdict"] == "abnormal":
-                unique_flags = list(dict.fromkeys(result["flags"]))
-                flag_str = ", ".join(unique_flags)
-                print(f"  [{i:3d}/{len(files)}] ⚠️ {basename} — {flag_str} ({elapsed:.2f}s)")
-            elif args.verbose:
-                print(f"  [{i:3d}/{len(files)}] ✅ {basename} ({elapsed:.2f}s)")
-
-        except Exception as e:
-            elapsed = time.time() - t1
-            print(f"  [{i:3d}/{len(files)}] ❌ {basename} — {e} ({elapsed:.2f}s)")
+    pipe.run_phase1()
+    if ref_profile is not None:
+        pipe.run_phase2()
+    if enable_asr:
+        pipe.run_phase3()
 
     total_time = time.time() - t0
-    print(f"\n{report.format_report(results, len(files), total_time)}")
+    combined = pipe.get_combined_results()
+
+    filtered_count = len(getattr(pipe, 'filtered_files', []))
+    print(report.format_report(combined, len(files), total_time, silence, filtered_count=filtered_count))
 
     if args.output:
-        report.save_json_report(results, len(files), args.output)
+        report.save_json_report(combined, len(files), args.output)
         print(f"\n💾 报告: {args.output}")
 
 
@@ -825,7 +752,8 @@ def cmd_view(args):
     print(f"✅ 波形标记图: {svg_path}")
     if args.open:
         import subprocess
-        subprocess.run(["open", svg_path])
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.run([opener, svg_path])
 
 
 def cmd_env(args):
@@ -898,6 +826,75 @@ def _resolve_sample(user_input: str, work_dir: str) -> str | None:
     return None
 
 
+def _pick_sample_interactive(work_dir: str) -> str | None:
+    """交互式选择参考样本 — 列出候选，用户编号选择或输入路径/文件名"""
+    import pathlib
+
+    # 收集候选：项目 sample/ 目录 + 工作目录中含关键词的文件
+    pkg_sample = pathlib.Path(__file__).parent.parent / "sample"
+    candidates = []  # (显示名, 完整路径, 来源)
+
+    # 1. 项目 sample/ 目录
+    if pkg_sample.is_dir():
+        for f in sorted(pkg_sample.glob("*.wav")):
+            candidates.append((f.name, str(f), "sample/"))
+
+    # 2. 工作目录中含 "正常"/"ref"/"normal" 的文件
+    for f in sorted(pathlib.Path(work_dir).glob("*.wav")):
+        name_lower = f.stem.lower()
+        if any(kw in name_lower for kw in ("正常", "ref", "normal")):
+            if "不正常" not in name_lower and "abnormal" not in name_lower:
+                candidates.append((f.name, str(f), "录音目录"))
+
+    if not candidates:
+        # 无候选 → 直接让用户输入
+        s = input("  📌 参考样本路径: ").strip()
+        if not s:
+            print("  ❌ 未指定参考样本")
+            return None
+        resolved = _resolve_sample(s, work_dir)
+        if not resolved:
+            print(f"  ❌ 文件不存在: {s}")
+            return None
+        print(f"  📌 参考样本: {os.path.basename(resolved)}")
+        return resolved
+
+    # 列出候选
+    print()
+    print("  📌 选择参考样本:")
+    print()
+    for i, (name, _, source) in enumerate(candidates, 1):
+        print(f"    {i:2d}  {name}  ({source})")
+    print()
+    print("    或直接输入文件路径/文件名")
+    print()
+
+    raw = input(f"  选择 [1-{len(candidates)} / 路径 / 回车=1]: ").strip()
+
+    # 空回车 → 默认第 1 个
+    if not raw:
+        raw = "1"
+
+    # 数字选择
+    if raw.isdigit():
+        idx = int(raw)
+        if 1 <= idx <= len(candidates):
+            chosen = candidates[idx - 1]
+            print(f"  📌 参考样本: {chosen[0]}")
+            return chosen[1]
+        else:
+            print(f"  ❌ 超出范围: {idx}")
+            return None
+
+    # 文件路径/名称输入
+    resolved = _resolve_sample(raw, work_dir)
+    if not resolved:
+        print(f"  ❌ 文件不存在: {raw}")
+        return None
+    print(f"  📌 参考样本: {os.path.basename(resolved)}")
+    return resolved
+
+
 def cmd_interactive(args):
     """交互模式 — 最少交互，直接开干"""
     if not _lazy_imports():
@@ -905,7 +902,7 @@ def cmd_interactive(args):
     print()
     print("  ┌─────────────────────────────────────────────┐")
     print("  │         SIP-wav 语音异常检测工具             │")
-    print("  │         v0.1.1 · 三层管线 · 样本锚定         │")
+    print("  │         v0.1.4 · 三层管线 · 样本锚定         │")
     print("  └─────────────────────────────────────────────┘")
     print()
     print("    1  模式 A — 波形快速筛查（静音/纯音/截断/能量）")
@@ -945,22 +942,13 @@ def cmd_interactive(args):
         return
     print(f"  📂 {len(files)} 个 WAV 文件")
 
-    # 模式 B/C：自动找参考样本，找不到再问
+    # 模式 B/C：选择参考样本
     sample_path = None
     asr_mode = "auto"
     if choice in ("2", "3"):
-        auto = _auto_find_reference(dir_path)
-        if auto:
-            sample_path = auto
-            print(f"  📌 参考样本: {os.path.basename(sample_path)}")
-        else:
-            s = input("  📌 参考样本: ").strip()
-            if s:
-                sample_path = _resolve_sample(s, dir_path)
-                if not sample_path:
-                    print(f"  ❌ 文件不存在: {s}")
-                    return
-                print(f"  📌 参考样本: {os.path.basename(sample_path)}")
+        sample_path = _pick_sample_interactive(dir_path)
+        if sample_path is None:
+            return
 
     # 直接开跑（默认参数：静音 2s，ASR auto）
     silence = 2.0
@@ -993,14 +981,10 @@ def _interactive_resume():
     import json
 
     search_dirs = []
-    for d in pathlib.Path.home().iterdir():
-        if d.is_dir() and not d.name.startswith('.'):
-            task_file = d / ".sipcheck_task.json"
-            if task_file.exists():
-                search_dirs.append(str(d))
-    cwd_task = pathlib.Path.cwd() / ".sipcheck_task.json"
+    cwd = pathlib.Path.cwd()
+    cwd_task = cwd / ".sipcheck_task.json"
     if cwd_task.exists():
-        search_dirs.insert(0, str(pathlib.Path.cwd()))
+        search_dirs.append(str(cwd))
 
     if not search_dirs:
         print("  ⚠️  没有找到未完成的任务")

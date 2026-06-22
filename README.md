@@ -171,6 +171,29 @@ sipcheck doctor   # 遇到问题先跑这个
 | venv 卡死（import 超时） | `rm -ri .venv && python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[server]"` |
 | 彻底重来 | `rm -ri .venv && python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[full]"` |
 
+### CentOS 7 部署
+
+CentOS 7 自带 Python 2.7，项目需要 Python 3.10+。
+
+```bash
+# 安装 pyenv（推荐）
+curl https://pyenv.run | bash
+# 按提示把 3 行 export 加到 ~/.bashrc，然后 source ~/.bashrc
+pyenv install 3.12.13
+pyenv local 3.12.13   # 在项目目录下写入 .python-version
+
+# 然后按标准流程
+git clone https://github.com/scomper/SIP-wav.git
+cd SIP-wav
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[server]"   # 轻量（云端 ASR，推荐服务器用）
+# 或
+pip install -e ".[full]"     # 完整（本地 ASR，需 2GB+ 磁盘）
+```
+
+> CentOS 8 / Stream / AlmaLinux 自带 Python 3.6，同样需要 pyenv 装 3.10+。
+> Ubuntu 22.04+ 自带 Python 3.10+，可直接用。
+
 ## License
 
 [MIT](LICENSE)

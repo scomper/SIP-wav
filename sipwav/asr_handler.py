@@ -18,14 +18,23 @@ _ASR_LOCK = threading.Lock()
 
 @contextlib.contextmanager
 def _suppress_output():
-    """临时抑制 stdout/stderr（funasr 模型加载时的冗余输出）"""
-    with open(os.devnull, "w") as devnull:
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout, sys.stderr = devnull, devnull
-        try:
-            yield
-        finally:
-            sys.stdout, sys.stderr = old_stdout, old_stderr
+    """临时抑制 stdout/stderr — fd 级重定向（jieba/funasr 的 print 和 logging handler 持有原始 fd）"""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    old_stdout_fd = os.dup(1)
+    old_stderr_fd = os.dup(2)
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = open(os.devnull, "w"), open(os.devnull, "w")
+    os.dup2(devnull, 1)
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        os.dup2(old_stdout_fd, 1)
+        os.dup2(old_stderr_fd, 2)
+        os.close(old_stdout_fd)
+        os.close(old_stderr_fd)
+        os.close(devnull)
+        sys.stdout, sys.stderr = old_stdout, old_stderr
 
 
 def _get_asr_model():
@@ -36,8 +45,8 @@ def _get_asr_model():
     with _ASR_LOCK:
         if _ASR_MODEL is not None:
             return _ASR_MODEL
-        os.environ["FUNASR_LOG_LEVEL"] = "ERROR"
-        os.environ["MODELSCOPE_LOG_LEVEL"] = "ERROR"
+        os.environ["FUNASR_LOG_LEVEL"] = "40"
+        os.environ["MODELSCOPE_LOG_LEVEL"] = "40"
 
         with _suppress_output():
             from funasr import AutoModel
@@ -80,7 +89,6 @@ def _local_transcribe(y: np.ndarray, sr: int) -> dict:
                 except Exception:
                     numbers = []
 
-                import re
                 chars = list(seg_text)
                 ts_len = len(ts)
                 punct_positions = [i for i, c in enumerate(chars) if c in "。！？，、；："]
@@ -117,21 +125,6 @@ def _local_transcribe(y: np.ndarray, sr: int) -> dict:
     }
 
 
-def _get_aliyun_api_key() -> str:
-    """获取百炼 API Key"""
-    key = os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("ALIYUN_ASR_API_KEY", "")
-    if key:
-        return key
-    csv_path = os.path.expanduser("~/Downloads/主账号空间-***REMOVED***.csv")
-    if os.path.exists(csv_path):
-        with open(csv_path, encoding="utf-8-sig") as f:
-            for line in f:
-                parts = line.strip().split(",", 1)
-                if len(parts) == 2 and parts[0] == "apiKey":
-                    return parts[1]
-    return ""
-
-
 def transcribe(y: np.ndarray, sr: int, use_fallback: bool = False) -> dict:
     """ASR 转写 — 优先本地 funasr，失败时回退到阿里云百炼
 
@@ -148,12 +141,12 @@ def transcribe(y: np.ndarray, sr: int, use_fallback: bool = False) -> dict:
         return result
 
     # 本地 ASR 无结果 → 尝试阿里云百炼
-    api_key = _get_aliyun_api_key()
+    from . import asr_aliyun
+    api_key = asr_aliyun._get_api_key()
     if not api_key:
         result["fallback_skipped"] = "未配置百炼 API Key"
         return result
 
-    from . import asr_aliyun
     ali_result = asr_aliyun.transcribe(y, sr, api_key=api_key)
     return ali_result if ali_result.get("has_content") else result
 

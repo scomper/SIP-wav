@@ -26,13 +26,14 @@ class Pipeline:
                  phases: str = "123", silence_threshold: float = 2.0,
                  ref_path: str | None = None, ref_numbers: list[dict] | None = None,
                  max_asr_files: int = 100, asr_sample_size: int = 10,
-                 interactive: bool = False):
+                 interactive: bool = False, ref_sr: int = 8000):
         from . import features as feat
         # 排除参考样本（它不参与检测）
         self.ref_path = ref_path
         self.files = [f for f in files if f != ref_path]
         self.total = len(self.files)
         self.ref_profile = ref_profile
+        self._ref_sr = ref_sr
         self.ref_vad_segments = ref_vad_segments
         self.ref_asr_text = ref_asr_text
         self.ref_numbers = ref_numbers or []
@@ -53,26 +54,30 @@ class Pipeline:
         self.filtered_files: list[str] = []  # 被样本预过滤的文件
 
     def _prefilter_by_sample(self, files: list[str]) -> list[str]:
-        """样本预过滤：排除与样本特征差异过大的文件"""
-        import numpy as np
-        # 过滤规则：时长比<0.3或>3.0、采样率不同、能量差异>50倍
+        """样本预过滤：只读 WAV 文件头（时长/采样率），不加载波形"""
+        import wave as _wave
         if not self.ref_profile or not files:
             return files
 
         ref_dur = self.ref_profile.get("duration_s", 0)
-        ref_rms = self.ref_profile.get("rms_mean", 0)
-        ref_sr = self.ref_profile.get("sr", 8000)
+        ref_sr = 8000  # 参考样本采样率（从 ref_profile 推断）
+
+        # 从 l1_results 或 ref_profile 推断采样率
+        if hasattr(self, '_ref_sr'):
+            ref_sr = self._ref_sr
 
         kept = []
         for fpath in files:
             if fpath == self.ref_path:
                 continue
             try:
-                y, sr = self.feat.load_wav(fpath)
-                dur = len(y) / sr
-                rms = float(np.sqrt(np.mean(y**2)))
+                # 只读文件头：帧数、采样率 → 时长
+                with _wave.open(str(fpath), "rb") as wf:
+                    sr = wf.getframerate()
+                    n_frames = wf.getnframes()
+                    dur = n_frames / sr if sr > 0 else 0
 
-                # 时长比检查（与 L2 一致：0.7~1.3 为合理范围，放宽到 0.5~2.0）
+                # 时长比检查
                 if ref_dur > 0:
                     ratio = dur / ref_dur
                     if ratio < 0.5 or ratio > 2.0:
@@ -84,16 +89,9 @@ class Pipeline:
                     self.filtered_files.append(fpath)
                     continue
 
-                # 能量级别检查（静音 vs 正常，差异 >50 倍）
-                if ref_rms > 0 and rms > 0:
-                    energy_ratio = max(rms, ref_rms) / max(min(rms, ref_rms), 1e-10)
-                    if energy_ratio > 50:
-                        self.filtered_files.append(fpath)
-                        continue
-
                 kept.append(fpath)
             except Exception:
-                kept.append(fpath)  # 加载失败的保留，让 L1 处理
+                kept.append(fpath)  # 读头失败的保留，让 L1 处理
 
         if self.filtered_files:
             print(f"  📋 样本预过滤: 排除 {len(self.filtered_files)} 个特征不匹配文件")
@@ -309,7 +307,7 @@ class Pipeline:
                                          ref_numbers=self.ref_numbers)
         elif self.asr_mode == "aliyun":
             from . import asr_aliyun
-            api_key = asr._get_aliyun_api_key()
+            api_key = asr_aliyun._get_api_key()
             ali_result = asr_aliyun.transcribe(y, sr, api_key=api_key)
             l3 = {"transcribed": ali_result}
             if self.ref_asr_text and ali_result.get("has_content"):
