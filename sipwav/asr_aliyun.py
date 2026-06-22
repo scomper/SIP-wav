@@ -54,12 +54,11 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
     if not api_key:
         return {"text": "", "error": "未配置百炼 API Key", "provider": "aliyun"}
 
-    os.environ["DASHSCOPE_API_KEY"] = api_key
-    from dashscope import Files
     import httpx
 
     try:
         t_start = time.time()
+        headers = {"Authorization": f"Bearer {api_key}"}
 
         # Step 1: 保存为临时 WAV
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -67,15 +66,33 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
             sf.write(tmp.name, y, sr, subtype="PCM_16")
             tmp.close()
 
-            # Step 2: 用 SDK 上传（兼容性最好）
-            upload_resp = Files.upload(file_path=tmp.name, purpose="inference")
+            # Step 2: httpx 上传（绕过 dashscope SDK 的 SSL 兼容问题）
+            with open(tmp.name, "rb") as f:
+                upload_resp = httpx.post(
+                    "https://dashscope.aliyuncs.com/api/v1/files",
+                    headers=headers,
+                    files={"file": ("audio.wav", f, "audio/wav")},
+                    data={"purpose": "file-extract"},
+                    timeout=120,
+                )
             if upload_resp.status_code != 200:
-                return {"text": "", "error": f"上传失败: {upload_resp}", "provider": "aliyun"}
-            file_id = upload_resp.output["uploaded_files"][0]["file_id"]
-            file_info = Files.get(file_id)
+                return {"text": "", "error": f"上传失败: {upload_resp.status_code}", "provider": "aliyun"}
+
+            file_id = upload_resp.json().get("data", {}).get("uploaded_files", [{}])[0].get("file_id", "")
+            if not file_id:
+                return {"text": "", "error": f"获取 file_id 失败: {upload_resp.text[:100]}", "provider": "aliyun"}
+
+            # Step 3: 用 file_id 获取下载 URL
+            file_info = httpx.get(
+                f"https://dashscope.aliyuncs.com/api/v1/files/{file_id}",
+                headers=headers,
+                timeout=30,
+            )
             if file_info.status_code != 200:
-                return {"text": "", "error": "获取文件信息失败", "provider": "aliyun"}
-            file_url = file_info.output["url"]
+                return {"text": "", "error": f"获取文件信息失败: {file_info.status_code}", "provider": "aliyun"}
+            file_url = file_info.json().get("data", {}).get("download_url", "")
+            if not file_url:
+                return {"text": "", "error": "获取下载 URL 失败", "provider": "aliyun"}
 
             # Step 3: 提交转写（Qwen3 用 file_url 单数，其他用 file_urls 复数）
             if "qwen3" in ASR_MODEL:
