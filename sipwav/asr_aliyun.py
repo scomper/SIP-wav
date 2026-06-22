@@ -64,16 +64,23 @@ def _get_phrase_id(api_key: str) -> str | None:
 
         # 查询已有热词
         result = AsrPhraseManager.list_phrases(model=ASR_MODEL)
-        outputs = result.output.get("finetuned_outputs", []) if result.output else []
-        if outputs:
-            _PHRASE_ID = outputs[0].get("finetuned_output", "")
-            return _PHRASE_ID
+        if result.output:
+            # output 可能是 dict 或对象
+            out = result.output if isinstance(result.output, dict) else result.output.__dict__
+            outputs = out.get("finetuned_outputs", [])
+            if outputs:
+                first = outputs[0]
+                _PHRASE_ID = first.get("finetuned_output", "") if isinstance(first, dict) else getattr(first, "finetuned_output", "")
+                if _PHRASE_ID:
+                    return _PHRASE_ID
 
         # 没有则创建
         result = AsrPhraseManager.create_phrases(model=ASR_MODEL, phrases=DEFAULT_HOTWORDS)
-        if result.output and hasattr(result.output, "finetuned_output"):
-            _PHRASE_ID = result.output.finetuned_output
-            return _PHRASE_ID
+        if result.output:
+            out = result.output if isinstance(result.output, dict) else result.output.__dict__
+            _PHRASE_ID = out.get("finetuned_output", "")
+            if _PHRASE_ID:
+                return _PHRASE_ID
     except Exception:
         pass
     return None
@@ -197,16 +204,20 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
 
             elapsed = time.time() - t_start
 
-            # Step 6: 获取结果
+            # Step 6: 获取结果（兼容 Filetrans / Paraformer 两种返回格式）
             text = ""
-            for r in output.get("results", []):
-                tx_url = r.get("transcription_url", "")
-                if tx_url:
-                    tx_resp = httpx.get(tx_url, timeout=30)
-                    if tx_resp.status_code == 200:
-                        tx_data = tx_resp.json()
-                        texts = [t.get("text", "") for t in tx_data.get("transcripts", [])]
-                        text = " ".join(texts)
+            tx_url = output.get("result", {}).get("transcription_url", "")  # Filetrans
+            if not tx_url:
+                for r in output.get("results", []):  # Paraformer
+                    tx_url = r.get("transcription_url", "")
+                    if tx_url:
+                        break
+            if tx_url:
+                tx_resp = httpx.get(tx_url, timeout=30)
+                if tx_resp.status_code == 200:
+                    tx_data = tx_resp.json()
+                    texts = [t.get("text", "") for t in tx_data.get("transcripts", [])]
+                    text = " ".join(texts)
 
             return {
                 "text": text.strip(),
