@@ -69,63 +69,63 @@ pip install -e ".[full]"
 ### 基本使用
 
 ```bash
-# 交互模式（引导选择）
+# Interactive mode
 sipcheck
 
-# 命令行：L1 波形检测
-sipcheck task --dir ./录音/
+# Command line: L1 waveform screening
+sipcheck task --dir ./records/
 
-# 命令行：全管线（L1 + L2 + L3）
-sipcheck task --dir ./录音/ --sample 参考.wav --silence 2
+# Command line: full pipeline (L1 + L2 + L3)
+sipcheck task --dir ./records/ --sample ref.wav --silence 2
 ```
 
-## 命令一览
+## Commands
 
-| 命令 | 功能 |
-|------|------|
-| `sipcheck` | 交互模式（选模式 → 输目录 → 自动跑） |
-| `sipcheck doctor` | 环境诊断 |
-| `sipcheck task --dir ./录音/` | 任务模式（支持断点续跑） |
-| `sipcheck scan --dir ./录音/` | 简单批量扫描 |
-| `sipcheck info 文件.wav` | 查看单文件详情 |
-| `sipcheck view 文件.wav -d 60 --open` | 波形标记 SVG 可视化 |
-| `sipcheck gen "文本内容" --output ref.wav` | TTS 生成参考语音 |
+| Command | Description |
+|---------|-------------|
+| `sipcheck` | Interactive mode (select mode → input directory → auto run) |
+| `sipcheck doctor` | Environment diagnostics |
+| `sipcheck task --dir ./records/` | Task mode (supports resume) |
+| `sipcheck scan --dir ./records/` | Simple batch scan |
+| `sipcheck info file.wav` | View single file details |
+| `sipcheck view file.wav -d 60 --open` | Waveform SVG visualization |
+| `sipcheck gen "Your verification code is 123456" --output ref.wav` | TTS generate reference voice |
 
-### 常用参数
+### Parameters
 
-| 参数 | 说明 |
-|------|------|
-| `--sample ref.wav` | 参考样本（模式 B/C） |
-| `--silence 2` | 静音阈值（秒），默认 2.0 |
-| `--asr` | 启用 ASR 内容分析 |
-| `--asr-mode aliyun` | ASR 模式：`local` / `aliyun` / `auto` |
-| `-p 1` | 仅 L1 波形检测 |
-| `-p 12` | L1 + L2 样本比对 |
-| `-p 123` | 全管线（默认） |
-| `--no-resume` | 不恢复旧任务 |
+| Parameter | Description |
+|-----------|-------------|
+| `--sample ref.wav` | Reference sample (mode B/C) |
+| `--silence 2` | Silence threshold (seconds), default 2.0 |
+| `--asr` | Enable ASR content analysis |
+| `--asr-mode aliyun` | ASR mode: `local` / `aliyun` / `auto` |
+| `-p 1` | L1 waveform screening only |
+| `-p 12` | L1 + L2 sample comparison |
+| `-p 123` | Full pipeline (default) |
+| `--no-resume` | Do not resume previous task |
 
-## 部署
+## Deployment
 
-### 方案 A：完整部署（本地 ASR + 云端回退）
+### Option A: Full deployment (local ASR + cloud fallback)
 
 ```bash
 pip install -e ".[full]"
 ```
 
-需要 PyTorch + FunASR（约 2GB），首次加载模型 ~10s。ASR 默认本地推理，无结果时自动回退阿里云。
+Requires PyTorch + FunASR (~2GB), first model load ~10s. ASR runs locally by default, falls back to Aliyun on failure.
 
-### 方案 B：轻量化部署（仅云端 ASR）⭐ 推荐
+### Option B: Lightweight deployment (cloud ASR only) ⭐ Recommended
 
 ```bash
 pip install -e ".[server]"
 ```
 
-仅需 dashscope + librosa，**不安装 torch/funasr**，体积小、启动快。
+Only needs dashscope + librosa, **no torch/funasr**, small footprint, fast startup.
 
-使用时指定 `--asr-mode aliyun`：
+Usage with `--asr-mode aliyun`:
 ```bash
-sipcheck scan --dir ./录音/ --asr --asr-mode aliyun
-sipcheck scan --dir ./录音/ --sample ref.wav --asr --asr-mode aliyun
+sipcheck scan --dir ./records/ --asr --asr-mode aliyun
+sipcheck scan --dir ./records/ --sample ref.wav --asr --asr-mode aliyun
 ```
 
 > 环境检测会自动选择推荐模式（无 funasr 时自动切 aliyun）。
