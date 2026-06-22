@@ -196,3 +196,117 @@ def save_json_report(results: list[dict], total: int, output_path: str):
     }
     with open(output_path, "w") as f:
         json.dump(report, f, ensure_ascii=False, indent=2, default=str)
+
+
+# ─── 通知送达报告 ────────────────────────────────────────────────
+
+_STATUS_ICON = {
+    "delivered": "✅ 已送达",
+    "partial":   "⚠️ 部分送达",
+    "no_match":  "❌ 未匹配",
+    "no_voice":  "❌ 无语音",
+    "error":     "❌ 错误",
+}
+
+
+def format_notification_report(notif_result: dict, elapsed_s: float = 0,
+                               json_path: str | None = None) -> str:
+    """格式化通知送达报告（终端输出）
+
+    Args:
+        notif_result: run_notification_mode() 的返回值
+        elapsed_s: 总耗时
+        json_path: JSON 报告路径（可选）
+    """
+    lines = []
+    ref_info = notif_result.get("ref_info", {})
+    results = notif_result.get("results", [])
+    summary = notif_result.get("summary", {})
+
+    if notif_result.get("error"):
+        lines.append(f"\n  ❌ {notif_result['error']}\n")
+        return "\n".join(lines)
+
+    ref_name = os.path.basename(ref_info.get("path", "?"))
+    ref_notif_dur = ref_info.get("notification_duration_s", 0)
+
+    lines.append(f"\n  {'━' * 68}")
+    lines.append(f"  语音通知送达报告")
+    lines.append(f"  {'━' * 68}")
+    lines.append(f"  参考样本: {ref_name} (通知内容 {ref_notif_dur:.0f}s)")
+    lines.append("")
+
+    # 表头
+    lines.append(f"  {'文件名':30s}  {'时长':>6s}  {'相似度':>6s}  {'送达度':>6s}  {'挂断点':>7s}  {'状态'}")
+    lines.append(f"  {'-'*30}  {'-'*6}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*12}")
+
+    for r in results:
+        basename = os.path.basename(r.get("file", ""))[:30]
+        dur = r.get("duration_s", 0)
+        dur_str = f"{dur:.0f}s" if dur else "?"
+
+        sim = r.get("head_similarity", 0)
+        sim_str = f"{sim:.2f}" if r.get("head_match") else "-"
+
+        delivery = r.get("delivery")
+        if delivery:
+            ratio = delivery["delivery_ratio"]
+            ratio_str = f"{ratio:.0%}"
+            hangup = delivery["hangup_s"]
+            hangup_str = f"{hangup:.0f}s"
+        else:
+            ratio_str = "-"
+            hangup_str = "-"
+
+        status = _STATUS_ICON.get(r.get("status", "error"), "❓ 未知")
+
+        lines.append(
+            f"  {basename:30s}  {dur_str:>6s}  {sim_str:>6s}  {ratio_str:>6s}  {hangup_str:>7s}  {status}"
+        )
+
+    lines.append("")
+
+    # 汇总
+    d = summary.get("delivered", 0)
+    p = summary.get("partial", 0)
+    n = summary.get("no_match", 0)
+    err = summary.get("errors", 0)
+    total = summary.get("total", 0)
+
+    parts = [f"已送达 {d}"]
+    if p > 0:
+        parts.append(f"部分送达 {p}")
+    if n > 0:
+        parts.append(f"未匹配 {n}")
+    if err > 0:
+        parts.append(f"错误 {err}")
+    parts.append(f"共 {total}")
+
+    if elapsed_s > 0:
+        parts.append(f"{elapsed_s:.1f}s")
+
+    icon = "✅" if n == 0 and err == 0 and p == 0 else "⚠️"
+    lines.append(f"  {icon} {' · '.join(parts)}")
+
+    if json_path:
+        lines.append(f"  📄 JSON → {json_path}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def save_notification_json_report(notif_result: dict, output_path: str):
+    """保存通知送达 JSON 报告"""
+    # 去掉 numpy 数组等不可序列化的数据
+    clean = {k: v for k, v in notif_result.items() if k != "ref_info"}
+    if "ref_info" in notif_result:
+        clean["ref_info"] = {k: v for k, v in notif_result["ref_info"].items()}
+
+    clean_results = []
+    for r in notif_result.get("results", []):
+        entry = {k: v for k, v in r.items() if k not in ("y", "sr")}
+        clean_results.append(entry)
+    clean["results"] = clean_results
+
+    with open(output_path, "w") as f:
+        json.dump(clean, f, ensure_ascii=False, indent=2, default=str)

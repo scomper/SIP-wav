@@ -426,6 +426,11 @@ def cmd_task(args):
     """任务模式 — 分阶段管线处理，各阶段独立进度"""
     if not _lazy_imports():
         return
+
+    # 通知模式：直接走 cmd_notification
+    if getattr(args, 'mode', 'quality') == 'notification':
+        return cmd_notification(args)
+
     from .pipeline import Pipeline
     import numpy as np
 
@@ -607,6 +612,56 @@ def cmd_task(args):
     print(report.format_report(combined, len(files), elapsed_total, silence_threshold, results_path, filtered_count))
 
 
+def cmd_notification(args):
+    """通知模式 — 语音通知送达验证（头部匹配 + 送达比）"""
+    if not _lazy_imports():
+        return
+    from .pipeline import Pipeline
+
+    work_dir = args.work_dir or args.dir
+    head_seconds = getattr(args, 'head_seconds', 5.0)
+
+    # 查找参考样本
+    sample_path = getattr(args, 'sample', None)
+    if not sample_path:
+        sample_path = _auto_find_reference(args.dir)
+    if not sample_path:
+        print("  ❌ 通知模式需要参考样本 (--sample 或目录中含 '正常'/'ref' 文件)")
+        return
+
+    if not os.path.exists(sample_path):
+        print(f"  ❌ 参考样本不存在: {sample_path}")
+        return
+
+    # 查找录音文件
+    files = scanner.find_wav_files(args.dir)
+    if not files:
+        print(f"  ⚠️ 在 {args.dir} 中未找到 WAV 文件")
+        return
+
+    # 排除参考样本自身
+    files = [f for f in files if os.path.abspath(f) != os.path.abspath(sample_path)]
+    if not files:
+        print(f"  ⚠️ 除参考样本外没有其他 WAV 文件")
+        return
+
+    print(f"\n  📢 语音通知送达验证")
+    print(f"  参考样本: {os.path.basename(sample_path)}")
+    print(f"  待检文件: {len(files)} 个")
+    print(f"  头部匹配: {head_seconds}s")
+    print()
+
+    pipe = Pipeline(files, ref_path=sample_path)
+    t0 = time.time()
+    notif_result = pipe.run_notification_mode(head_seconds=head_seconds)
+    elapsed = time.time() - t0
+
+    # 输出报告
+    json_path = getattr(args, 'output', None) or os.path.join(work_dir, "sipcheck_notification.json")
+    report.save_notification_json_report(notif_result, json_path)
+    print(report.format_notification_report(notif_result, elapsed, json_path))
+
+
 def cmd_status(args):
     """查看任务状态"""
     if not _lazy_imports():
@@ -636,6 +691,11 @@ def cmd_scan(args):
     """简单扫描模式 — 不保留任务状态，走 Pipeline"""
     if not _lazy_imports():
         return
+
+    # 通知模式：直接走 cmd_notification
+    if getattr(args, 'mode', 'quality') == 'notification':
+        return cmd_notification(args)
+
     _apply_env_defaults(args)
     from .pipeline import Pipeline
 
@@ -1168,6 +1228,10 @@ def main():
     p_task = sub.add_parser("task", help="任务模式 — 支持中断恢复")
     p_task.add_argument("--dir", required=True, help="待检目录")
     p_task.add_argument("--sample", "-s", help="参考样本 WAV (样本锚定模式)")
+    p_task.add_argument("--mode", choices=["quality", "notification"], default="quality",
+                        help="检测模式: quality=异常检测(默认), notification=语音通知送达验证")
+    p_task.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
+                        help="通知模式头部匹配秒数 (默认 5s)")
     p_task.add_argument("--asr", action=argparse.BooleanOptionalAction, default=True,
                         help="启用 ASR 内容分析 (默认开，--no-asr 关闭)")
     p_task.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
@@ -1190,6 +1254,10 @@ def main():
     p_scan = sub.add_parser("scan", help="简单批量扫描（无任务状态）")
     p_scan.add_argument("--dir", required=True, help="待检目录")
     p_scan.add_argument("--sample", "-s", help="参考样本 WAV")
+    p_scan.add_argument("--mode", choices=["quality", "notification"], default="quality",
+                        help="检测模式: quality=异常检测(默认), notification=语音通知送达验证")
+    p_scan.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
+                        help="通知模式头部匹配秒数 (默认 5s)")
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
     p_scan.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")

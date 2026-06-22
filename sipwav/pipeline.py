@@ -482,3 +482,97 @@ class Pipeline:
             results.append(entry)
 
         return results
+
+    # ─── 通知模式 ─────────────────────────────────────────────────
+
+    def run_notification_mode(self, head_seconds: float = 5.0,
+                              head_threshold: float = 0.7) -> dict:
+        """语音通知送达验证模式
+
+        1. 加载参考样本，提取头部 MFCC
+        2. 逐文件做头部匹配 + 送达比例计算
+
+        Args:
+            head_seconds: 头部匹配秒数（默认 5s）
+            head_threshold: 相似度阈值（默认 0.7）
+
+        Returns:
+            {
+                "ref_info": {...},
+                "results": [通知检测结果...],
+                "summary": {...},
+            }
+        """
+        t0 = time.time()
+
+        # 加载参考样本
+        if not self.ref_path or not os.path.exists(self.ref_path):
+            return {"error": "未指定参考样本", "results": []}
+
+        y_ref, sr_ref = self.feat.load_wav(self.ref_path)
+        ref_start = self.feat.find_first_voice_frame(y_ref, sr_ref)
+        ref_dur = len(y_ref) / sr_ref
+        ref_head = self.feat.extract_head_features(y_ref, sr_ref, head_seconds, ref_start)
+        ref_notification_s = (len(y_ref) - ref_start) / sr_ref
+
+        ref_info = {
+            "path": self.ref_path,
+            "duration_s": round(ref_dur, 1),
+            "notification_start_s": round(ref_start / sr_ref, 2),
+            "notification_duration_s": round(ref_notification_s, 1),
+            "head_seconds": head_seconds,
+        }
+
+        if ref_head is None:
+            return {"error": "参考样本无有效语音", "ref_info": ref_info, "results": []}
+
+        print(f"  参考样本: {os.path.basename(self.ref_path)} "
+              f"(总时长 {ref_dur:.0f}s, 通知起点 {ref_start/sr_ref:.1f}s, 通知内容 {ref_notification_s:.0f}s)")
+
+        # 逐文件检测
+        print(f"  通知送达检测 ({self.total} 文件)...", end="", flush=True)
+
+        results = []
+        for fpath in self.files:
+            try:
+                y_test, sr_test = self.feat.load_wav(fpath)
+                check = self.feat.run_notification_check(
+                    y_ref, sr_ref, y_test, sr_test,
+                    head_seconds=head_seconds,
+                    head_threshold=head_threshold,
+                )
+                check["file"] = fpath
+                check["duration_s"] = round(len(y_test) / sr_test, 1)
+                results.append(check)
+            except Exception as e:
+                results.append({
+                    "file": fpath,
+                    "status": "error",
+                    "error": str(e),
+                    "head_match": False,
+                    "head_similarity": 0.0,
+                    "delivery": None,
+                })
+
+        elapsed = time.time() - t0
+        delivered = sum(1 for r in results if r["status"] == "delivered")
+        partial = sum(1 for r in results if r["status"] == "partial")
+        no_match = sum(1 for r in results if r["status"] in ("no_match", "no_voice"))
+        errors = sum(1 for r in results if r["status"] == "error")
+        print(f" {delivered} 已送达 / {partial} 部分送达 / {no_match} 未匹配 / {_format_elapsed(elapsed)}")
+
+        self.notification_results = results
+        self.phase_times["notification"] = elapsed
+
+        return {
+            "ref_info": ref_info,
+            "results": results,
+            "summary": {
+                "total": len(results),
+                "delivered": delivered,
+                "partial": partial,
+                "no_match": no_match,
+                "errors": errors,
+                "elapsed_s": round(elapsed, 1),
+            },
+        }
