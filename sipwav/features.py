@@ -195,7 +195,13 @@ def compute_zcr(y: np.ndarray, sr: int) -> dict:
 # ─── 截断检测 ────────────────────────────────────────────────────
 
 def detect_truncation(y: np.ndarray, sr: int) -> dict:
-    """检测尾部是否被截断（能量骤降）"""
+    """检测尾部是否被截断（能量骤降）
+
+    只检测真正的异常截断，电话录音尾部正常静音不报：
+    - 需要尾部静音持续 >3s 才算截断（排除正常挂机前的短暂停顿）
+    - 需要整段有语音内容（排除纯静音录音）
+    - 断崖式下降需要在语音段内突然发生
+    """
     frame_ms = 30
     frame_len = int(sr * frame_ms / 1000)
     rms = frame_rms(y, frame_len, frame_len)
@@ -203,17 +209,35 @@ def detect_truncation(y: np.ndarray, sr: int) -> dict:
     if len(rms) < 10:
         return {"is_truncated": False}
 
-    # 检查最后 5 帧的下降斜率
-    tail = rms[-5:]
-    if np.max(tail) < 0.001:
-        return {"is_truncated": True, "reason": "末尾无声"}
+    total_dur = len(y) / sr
+    rms_mean = float(np.mean(rms))
 
-    # 检查最后 10% 是否有断崖式下降
-    last_quarter = rms[-len(rms) // 4:]
-    if len(last_quarter) > 3:
-        gradient = np.gradient(last_quarter)
-        steep_drop = np.min(gradient) < -np.std(rms) * 3
-        if steep_drop and np.mean(last_quarter[-3:]) < np.mean(rms) * 0.1:
+    # 纯静音录音不算截断（那是"无声"问题）
+    if rms_mean < 0.001:
+        return {"is_truncated": False}
+
+    # 检查尾部静音：从末尾向前找最后一个有声帧
+    silence_threshold = rms_mean * 0.05  # 低于均值 5% 视为静音
+    last_sound_idx = len(rms) - 1
+    while last_sound_idx > 0 and rms[last_sound_idx] < silence_threshold:
+        last_sound_idx -= 1
+
+    tail_silence_dur = (len(rms) - 1 - last_sound_idx) * frame_ms / 1000
+
+    # 尾部静音 >3s 且占总时长 >10% → 可能截断（排除正常挂机）
+    if tail_silence_dur > 3.0 and tail_silence_dur / total_dur > 0.1:
+        # 检查是否有语音内容（有语音才可能是截断）
+        voiced_frames = np.sum(rms > silence_threshold)
+        if voiced_frames / len(rms) > 0.3:
+            return {"is_truncated": True, "reason": f"尾部静音{tail_silence_dur:.0f}s"}
+
+    # 检查最后 20% 是否有断崖式下降（比原来 10% 更严格）
+    last_segment = rms[-len(rms) // 5:]
+    if len(last_segment) > 5:
+        segment_mean = np.mean(last_segment)
+        overall_mean = np.mean(rms)
+        # 断崖式下降：尾部均值 < 整体均值的 5%，且尾部静音 >2s
+        if segment_mean < overall_mean * 0.05 and tail_silence_dur > 2.0:
             return {"is_truncated": True, "reason": "尾部断崖式下降"}
 
     return {"is_truncated": False}
