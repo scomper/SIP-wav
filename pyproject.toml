@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sipwav"
-version = "0.1.5"
+version = "0.1.6"
 description = "SIP 语音异常检测 — 波形分析 + 样本比对 + ASR 时间轴"
 authors = [{ name = "scomper" }]
 license = { text = "MIT" }
