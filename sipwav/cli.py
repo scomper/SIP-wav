@@ -537,7 +537,7 @@ def cmd_task(args):
                 print(f"       ... 共 {len(candidates)} 文件")
             print()
             if getattr(args, 'interactive', False):
-                confirm = input("  继续 ASR 分析？[Y/n]: ").strip().lower()
+                confirm = _prompt("  继续 ASR 分析？[Y/n]: ").lower()
                 if confirm in ("n", "no"):
                     print("  ⏭  跳过 ASR")
                     enable_asr = False
@@ -879,20 +879,20 @@ def _pick_sample_interactive(work_dir: str) -> str | None:
 
     if not candidates:
         # 无候选 → 直接让用户输入
-        s = input("  📌 参考样本路径: ").strip()
+        s = _prompt("  参考样本路径: ")
         if not s:
-            print("  ❌ 未指定参考样本")
+            print("  [X] 未指定参考样本")
             return None
         resolved = _resolve_sample(s, work_dir)
         if not resolved:
-            print(f"  ❌ 文件不存在: {s}")
+            print(f"  [X] 文件不存在: {s}")
             return None
-        print(f"  📌 参考样本: {os.path.basename(resolved)}")
+        print(f"  参考样本: {os.path.basename(resolved)}")
         return resolved
 
     # 列出候选
     print()
-    print("  📌 选择参考样本:")
+    print("  选择参考样本:")
     print()
     for i, (name, _, source) in enumerate(candidates, 1):
         print(f"    {i:2d}  {name}  ({source})")
@@ -900,7 +900,7 @@ def _pick_sample_interactive(work_dir: str) -> str | None:
     print("    或直接输入文件路径/文件名")
     print()
 
-    raw = input(f"  选择 [1-{len(candidates)} / 路径 / 回车=1]: ").strip()
+    raw = _prompt(f"  选择 [1-{len(candidates)} / 路径 / 回车=1]: ")
 
     # 空回车 → 默认第 1 个
     if not raw:
@@ -911,39 +911,51 @@ def _pick_sample_interactive(work_dir: str) -> str | None:
         idx = int(raw)
         if 1 <= idx <= len(candidates):
             chosen = candidates[idx - 1]
-            print(f"  📌 参考样本: {chosen[0]}")
+            print(f"  参考样本: {chosen[0]}")
             return chosen[1]
         else:
-            print(f"  ❌ 超出范围: {idx}")
+            print(f"  [X] 超出范围: {idx}")
             return None
 
     # 文件路径/名称输入
     resolved = _resolve_sample(raw, work_dir)
     if not resolved:
-        print(f"  ❌ 文件不存在: {raw}")
+        print(f"  [X] 文件不存在: {raw}")
         return None
-    print(f"  📌 参考样本: {os.path.basename(resolved)}")
+    print(f"  参考样本: {os.path.basename(resolved)}")
     return resolved
+
+
+def _prompt(msg: str) -> str:
+    """带 flush 的 input，修复 CentOS 7 SSH 终端渲染问题"""
+    sys.stdout.write(msg)
+    sys.stdout.flush()
+    return sys.stdin.readline().strip()
 
 
 def cmd_interactive(args):
     """交互模式 — 最少交互，直接开干"""
     if not _lazy_imports():
         return
+    try:
+        import readline  # noqa: F401 — 修复远程终端 input 行为
+    except ImportError:
+        pass
+
     print()
-    print("  ┌─────────────────────────────────────────────┐")
-    print("  │         SIP-wav 语音异常检测工具             │")
-    print("  │         v0.1.4 · 三层管线 · 样本锚定         │")
-    print("  └─────────────────────────────────────────────┘")
+    print("  +-----------------------------------------------+")
+    print("  |         SIP-wav 语音异常检测工具               |")
+    print("  |         v0.1.5 · 三层管线 · 样本锚定           |")
+    print("  +-----------------------------------------------+")
     print()
-    print("    1  模式 A — 波形快速筛查（静音/纯音/截断/能量）")
-    print("    2  模式 A+B — 波形筛查 + 样本锚定比对")
-    print("    3  模式 A+B+C — 全管线（波形 + 锚定 + ASR 内容）")
+    print("    1  模式 A -- 波形快速筛查（静音/纯音/截断/能量）")
+    print("    2  模式 A+B -- 波形筛查 + 样本锚定比对")
+    print("    3  模式 A+B+C -- 全管线（波形 + 锚定 + ASR 内容）")
     print()
     print("    r  恢复上次任务  d  环境诊断  q  退出")
     print()
 
-    choice = input("  选择 [1/2/3/r/d/q]: ").strip().lower()
+    choice = _prompt("  选择 [1/2/3/r/d/q]: ").lower()
     if choice == "q":
         return
     elif choice == "d":
@@ -953,25 +965,25 @@ def cmd_interactive(args):
         _interactive_resume()
         return
     elif choice not in ("1", "2", "3"):
-        print("  ❌ 无效选择")
+        print("  [X] 无效选择")
         return
 
     # 输入目录
     print()
-    dir_path = input("  📁 目录: ").strip()
+    dir_path = _prompt("  目录路径: ")
     if not dir_path:
-        print("  ❌ 未输入目录")
+        print("  [X] 未输入目录")
         return
     dir_path = os.path.expanduser(dir_path)
     if not os.path.isdir(dir_path):
-        print(f"  ❌ 目录不存在: {dir_path}")
+        print(f"  [X] 目录不存在: {dir_path}")
         return
 
     files = scanner.find_wav_files(dir_path)
     if not files:
-        print(f"  ⚠️  没有 WAV 文件")
+        print(f"  [!] 没有 WAV 文件")
         return
-    print(f"  📂 {len(files)} 个 WAV 文件")
+    print(f"  [*] {len(files)} 个 WAV 文件")
 
     # 模式 B/C：选择参考样本
     sample_path = None
