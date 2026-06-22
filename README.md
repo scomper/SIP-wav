@@ -173,25 +173,46 @@ sipcheck doctor   # 遇到问题先跑这个
 
 ### CentOS 7 部署
 
-CentOS 7 自带 Python 2.7，项目需要 Python 3.10+。
+CentOS 7 自带 Python 2.7 + OpenSSL 1.0.2 + GCC 4.8 + GLIBC 2.17，项目需要 Python 3.10+。
+直接装会遇到多个兼容性问题，以下是实测验证过的步骤。
 
 ```bash
-# 安装 pyenv（推荐）
-curl https://pyenv.run | bash
-# 按提示把 3 行 export 加到 ~/.bashrc，然后 source ~/.bashrc
-pyenv install 3.12.13
-pyenv local 3.12.13   # 在项目目录下写入 .python-version
+# 1. 安装编译依赖
+yum install -y gcc gcc-c++ make zlib-devel bzip2 bzip2-devel \
+  readline-devel sqlite sqlite-devel openssl-devel libffi-devel \
+  xz-devel libsndfile git
 
-# 然后按标准流程
-git clone https://github.com/scomper/SIP-wav.git
-cd SIP-wav
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[server]"   # 轻量（云端 ASR，推荐服务器用）
-# 或
-pip install -e ".[full]"     # 完整（本地 ASR，需 2GB+ 磁盘）
+# 2. 编译 OpenSSL 1.1.1（CentOS 7 自带 1.0.2，Python 3.10+ 要求 1.1.1+）
+curl -sL https://www.openssl.org/source/openssl-1.1.1w.tar.gz -o /tmp/openssl.tar.gz
+cd /tmp && tar xzf openssl.tar.gz && cd openssl-1.1.1w
+./config --prefix=/usr/local/ssl --openssldir=/usr/local/ssl shared
+make -j$(nproc) && make install
+echo '/usr/local/ssl/lib' > /etc/ld.so.conf.d/openssl-1.1.conf && ldconfig
+
+# 3. 编译 Python 3.12（必须带 --with-openssl 指向新版 OpenSSL）
+curl -sL https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tgz -o /tmp/Python.tgz
+cd /tmp && tar xzf Python.tgz && cd Python-3.12.13
+export LDFLAGS="-L/usr/local/ssl/lib"
+export CPPFLAGS="-I/usr/local/ssl/include"
+./configure --prefix=/usr/local --with-openssl=/usr/local/ssl
+make -j$(nproc) && make altinstall
+# 验证: /usr/local/bin/python3.12 -c "import ssl; print(ssl.OPENSSL_VERSION)"
+
+# 4. 克隆项目 + 安装
+git clone https://github.com/scomper/SIP-wav.git /opt/sipwav
+cd /opt/sipwav
+/usr/local/bin/python3.12 -m venv .venv && source .venv/bin/activate
+pip install 'numpy>=1.24,<2.0'   # 先锁定 numpy 版本（2.x 需要 GCC≥9.3）
+pip install -e ".[server]"        # 轻量（云端 ASR）
 ```
 
-> CentOS 8 / Stream / AlmaLinux 自带 Python 3.6，同样需要 pyenv 装 3.10+。
+> **⚠️ CentOS 7 常见坑：**
+> - **OpenSSL 太旧**：不编译 1.1.1 的话，Python 的 `ssl` 模块不会编进去，pip 无法联网
+> - **GCC 太旧**：numpy 2.x / scipy 新版需要 GCC≥9.3，锁定 `numpy<2.0` 用预编译 wheel
+> - **GLIBC 太旧**：Miniconda/Anaconda 的最新版要求 GLIBC≥2.28，CentOS 7 只有 2.17，不可用
+> - **GitHub 连不上**：如果服务器无法访问 github.com，本地打包后 scp 上传
+>
+> CentOS 8 / Stream / AlmaLinux 自带 Python 3.6，同样需要编译 3.10+。
 > Ubuntu 22.04+ 自带 Python 3.10+，可直接用。
 
 ## License

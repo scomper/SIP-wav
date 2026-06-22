@@ -373,6 +373,47 @@ class Pipeline:
             l3["flags"] = []
         return l3
 
+    # ─── ASR 预估 ─────────────────
+
+    def get_asr_candidates(self) -> list[tuple[str, float]]:
+        """返回 Phase 3 的候选文件列表 (path, duration_s)，用于预估 ASR 时间"""
+        candidates = [f for f in self.l1_results if f not in self.errors and f not in self.filtered_files]
+        if self.l2_results:
+            candidates = [
+                f for f in candidates
+                if f not in self.l2_results or not self.l2_results[f].get("flags")
+            ]
+        result = []
+        for fpath in candidates:
+            r = self.l1_results[fpath]
+            dur = len(r["y"]) / r["sr"]
+            result.append((fpath, dur))
+        return result
+
+    def estimate_asr_time(self) -> dict:
+        """预估 ASR 分析耗时
+
+        返回:
+            {"files": int, "total_dur_s": float, "est_time_s": float, "est_time_str": "..."}
+        """
+        candidates = self.get_asr_candidates()
+        if not candidates:
+            return {"files": 0, "total_dur_s": 0, "est_time_s": 0, "est_time_str": "0s"}
+
+        total_dur = sum(dur for _, dur in candidates)
+        # ASR 估算：本地 ~0.3x 实时，云端 ~0.5x 实时 + 网络开销
+        if self.asr_mode == "aliyun":
+            est_time = total_dur * 0.5 + len(candidates) * 2  # 每文件 2s 网络开销
+        else:
+            est_time = total_dur * 0.3
+
+        return {
+            "files": len(candidates),
+            "total_dur_s": round(total_dur, 1),
+            "est_time_s": round(est_time, 0),
+            "est_time_str": _format_elapsed(est_time),
+        }
+
     # ─── 结果汇总 ─────────────────
 
     def get_combined_results(self) -> list[dict]:

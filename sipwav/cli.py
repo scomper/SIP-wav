@@ -519,8 +519,30 @@ def cmd_task(args):
     pipe.run_phase1()
     if ref_profile is not None:
         pipe.run_phase2()
+
     if enable_asr:
-        pipe.run_phase3()
+        # ASR 确认：列出候选文件 + 预估时间，让用户选择是否继续
+        est = pipe.estimate_asr_time()
+        if est["files"] == 0:
+            print(f"\n  ℹ️  无候选文件，跳过 ASR")
+        else:
+            print(f"\n  🔍 ASR 候选: {est['files']} 文件")
+            print(f"     总录音时长: {_format_elapsed(est['total_dur_s'])}")
+            print(f"     预估耗时: {est['est_time_str']}")
+            # 列出候选文件名
+            candidates = pipe.get_asr_candidates()
+            for fpath, dur in candidates[:10]:
+                print(f"       • {os.path.basename(fpath)} ({dur:.0f}s)")
+            if len(candidates) > 10:
+                print(f"       ... 共 {len(candidates)} 文件")
+            print()
+            if getattr(args, 'interactive', False):
+                confirm = input("  继续 ASR 分析？[Y/n]: ").strip().lower()
+                if confirm in ("n", "no"):
+                    print("  ⏭  跳过 ASR")
+                    enable_asr = False
+            if enable_asr:
+                pipe.run_phase3()
 
     # ─── 汇总 ───
     elapsed_total = time.time() - t_start
@@ -620,8 +642,16 @@ def cmd_scan(args):
     pipe.run_phase1()
     if ref_profile is not None:
         pipe.run_phase2()
+
     if enable_asr:
-        pipe.run_phase3()
+        est = pipe.estimate_asr_time()
+        if est["files"] == 0:
+            print(f"\n  ℹ️  无候选文件，跳过 ASR")
+        else:
+            print(f"\n  🔍 ASR 候选: {est['files']} 文件 · "
+                  f"总录音 {_format_elapsed(est['total_dur_s'])} · "
+                  f"预估 {est['est_time_str']}")
+            pipe.run_phase3()
 
     total_time = time.time() - t0
     combined = pipe.get_combined_results()
