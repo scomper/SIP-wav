@@ -199,16 +199,27 @@ sipcheck task --dir ./records/ --sample notify.wav --mode notification --head-se
 **How it works:**
 1. Extract the first N seconds of the reference sample as "head" features (MFCC)
 2. For each recording: find the notification start point, compare head features
-3. If head matches (similarity > 0.7): calculate delivery ratio by comparing energy envelopes
-4. Report: delivery ratio, hangup point, status (delivered / partial / no match)
+3. If head matches (similarity ≥ 0.9): calculate delivery ratio by comparing energy envelopes
+4. If head doesn't match: **sliding window search** — scan through the reference to find where the recording content appears (detects "truncation" — recording start was lost)
+5. Report: delivery ratio, hangup point, status
 
 **Output example:**
 ```
 文件名                时长    相似度   送达度   挂断点   状态
 1380001_0618.wav      65s     1.00     100%     600s    ✅ 已送达
 1380002_0618.wav      18s     0.85      25%      15s    ⚠️ 部分送达
-1380003_0618.wav      35s     0.12       0%       -     ❌ 未匹配
+1380003_0618.wav      35s     -         0%       -     ⚠️ 吞字@200s
+1380004_0618.wav      12s     0.12       0%       -     ❌ 未匹配
 ```
+
+**Status types:**
+| Status | Meaning |
+|--------|---------|
+| ✅ 已送达 | Notification played completely (≥95%) |
+| ⚠️ 部分送达 | Notification played partially, user hung up early |
+| ⚠️ 吞字@Xs | Recording start was lost (truncation), content matches reference from position X |
+| ❌ 未匹配 | Recording doesn't match the reference notification |
+| ❌ 无语音 | No voice content detected |
 
 ### 阿里云百炼 API Key 配置
 
