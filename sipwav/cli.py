@@ -605,6 +605,7 @@ def cmd_scan(args):
     # 加载参考样本（如有）
     ref_profile = ref_vad_segments = ref_asr_text = None
     ref_numbers = []
+    sr_ref = 8000
     enable_asr = getattr(args, 'asr', False)
     asr_mode = getattr(args, 'asr_mode', 'auto')
 
@@ -1122,6 +1123,10 @@ def main():
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
     p_scan.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
+    p_scan.add_argument("--silence", type=float, default=2.0, metavar="SEC",
+                        help="静音检测阈值（秒） (默认 2.0)")
+    p_scan.add_argument("--phases", "-p", default="123",
+                        help="指定管线阶段 (默认 123)")
     p_scan.add_argument("--output", "-o", help="输出 JSON 报告路径")
     p_scan.add_argument("--verbose", "-v", action="store_true", help="显示正常结果")
 
