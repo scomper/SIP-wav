@@ -1,7 +1,8 @@
-"""Layer 3: ASR 内容分析 — funasr 本地推理 + 文本 diff"""
+"""Layer 3: ASR 内容分析 — funasr / mlx / 阿里云 三引擎"""
 
 import warnings
 import threading
+import tempfile
 import os
 import sys
 import contextlib
@@ -130,22 +131,86 @@ def _local_transcribe(y: np.ndarray, sr: int) -> dict:
     }
 
 
-def transcribe(y: np.ndarray, sr: int, use_fallback: bool = False) -> dict:
-    """ASR 转写 — 优先本地 funasr，失败时回退到阿里云百炼
+def _mlx_transcribe(y: np.ndarray, sr: int) -> dict:
+    """MLX Qwen3-ASR 本地推理（Apple Silicon Only）
+
+    Apple M 系列芯片上用 MLX 跑 Qwen3-ASR-0.6B，无需 GPU/PyTorch。
+
+    Returns:
+        {"text": "...", "has_content": bool, "provider": "mlx"}
+    """
+    try:
+        import subprocess, json, tempfile, os
+
+        # 写临时 WAV
+        tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        try:
+            import soundfile as sf
+            sf.write(tmp_wav.name, y, sr, subtype="PCM_16")
+            tmp_wav.close()
+
+            # 调 mlx-qwen3-asr CLI 转写（不写 --quiet，文本在 stdout 中）
+            result = subprocess.run(
+                ["mlx-qwen3-asr", tmp_wav.name],
+                capture_output=True, text=True, timeout=300,
+                env={**os.environ, 'http_proxy': os.environ.get('http_proxy', ''),
+                     'https_proxy': os.environ.get('https_proxy', '')}
+            )
+            if result.returncode == 0:
+                # stdout = progress bars + 文本行，去掉模型/进度前缀
+                lines = result.stdout.strip().splitlines()
+                texts = [l for l in lines
+                         if l.strip() and not l.startswith(('Model:', 'Fetching', 'Progress:'))]
+                text = "\n".join(texts)
+                return {"text": text.strip(), "has_content": bool(text.strip()),
+                        "provider": "mlx"}
+            else:
+                err = result.stderr.strip() or f"退出码 {result.returncode}"
+                return {"text": "", "has_content": False, "provider": "mlx", "error": err}
+        finally:
+            if os.path.exists(tmp_wav.name):
+                os.unlink(tmp_wav.name)
+    except FileNotFoundError:
+        return {"text": "", "has_content": False, "provider": "mlx",
+                "error": "mlx-qwen3-asr 未安装，执行: pip install mlx-qwen3-asr"}
+    except subprocess.TimeoutExpired:
+        return {"text": "", "has_content": False, "provider": "mlx",
+                "error": "mlx 推理超时"}
+    except Exception as e:
+        return {"text": "", "has_content": False, "provider": "mlx",
+                "error": f"mlx 调用失败: {e}"}
+
+
+def transcribe(y: np.ndarray, sr: int, use_fallback: bool = False,
+               engine: str = "auto") -> dict:
+    """ASR 转写 — funasr / mlx / 阿里云
 
     Args:
         y: 音频信号
         sr: 采样率
-        use_fallback: 是否启用阿里云回退
+        use_fallback: 本地失败时是否回退到阿里云百炼
+        engine: "auto" / "local"(funasr) / "mlx" / "aliyun"
 
     Returns:
-        {"text": "...", "has_content": bool, "provider": "funasr|aliyun"}
+        {"text": "...", "has_content": bool, "provider": "funasr|mlx|aliyun"}
     """
-    result = _local_transcribe(y, sr)
-    if result["has_content"] or not use_fallback:
-        return result
+    if engine == "mlx":
+        result = _mlx_transcribe(y, sr)
+        if result["has_content"] or not use_fallback:
+            return result
+        # MLX 无结果 → fallback
+    elif engine == "aliyun":
+        from . import asr_aliyun
+        api_key = asr_aliyun._get_api_key()
+        return asr_aliyun.transcribe(y, sr, api_key=api_key) if api_key else \
+            {"text": "", "has_content": False, "provider": "aliyun", "error": "未配置百炼 API Key"}
+    else:
+        # auto / local → funasr
+        result = _local_transcribe(y, sr)
+        if result["has_content"] or not use_fallback:
+            return result
 
-    # 本地 ASR 无结果 → 尝试阿里云百炼
+    # fallback: 本地无结果 → 阿里云百炼
     from . import asr_aliyun
     api_key = asr_aliyun._get_api_key()
     if not api_key:
@@ -158,12 +223,12 @@ def transcribe(y: np.ndarray, sr: int, use_fallback: bool = False) -> dict:
 
 def layer3_asr_check(
     y: np.ndarray, sr: int, ref_text: str | None = None, use_fallback: bool = False,
-    ref_numbers: list[dict] | None = None
+    ref_numbers: list[dict] | None = None, engine: str = "auto"
 ) -> dict:
-    """Layer 3: ASR 检测（支持阿里云回退 + 数字时间轴漂移检测）"""
+    """Layer 3: ASR 检测（支持 MLX / funasr / 阿里云回退 + 数字时间轴漂移检测）"""
     from .numbers import detect_drift
 
-    result = {"transcribed": transcribe(y, sr, use_fallback=use_fallback)}
+    result = {"transcribed": transcribe(y, sr, use_fallback=use_fallback, engine=engine)}
 
     if ref_text and result["transcribed"]["has_content"]:
         result["diff"] = text_diff(ref_text, result["transcribed"]["text"])

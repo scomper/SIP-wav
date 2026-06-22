@@ -311,7 +311,10 @@ class Pipeline:
         """单文件 ASR"""
         if self.asr_mode == "local":
             return asr.layer3_asr_check(y, sr, self.ref_asr_text, use_fallback=False,
-                                         ref_numbers=self.ref_numbers)
+                                         ref_numbers=self.ref_numbers, engine="local")
+        elif self.asr_mode == "mlx":
+            return asr.layer3_asr_check(y, sr, self.ref_asr_text, use_fallback=False,
+                                         ref_numbers=self.ref_numbers, engine="mlx")
         elif self.asr_mode == "aliyun":
             from . import asr_aliyun
             api_key = asr_aliyun._get_api_key()
@@ -333,7 +336,7 @@ class Pipeline:
             return l3
         else:
             return asr.layer3_asr_check(y, sr, self.ref_asr_text, use_fallback=True,
-                                         ref_numbers=self.ref_numbers)
+                                         ref_numbers=self.ref_numbers, engine="auto")
 
     def _asr_sliced(self, y, sr, asr) -> dict:
         """长文件切片 ASR"""
@@ -344,9 +347,11 @@ class Pipeline:
             y_slice = y[start:end]
             time_offset = start / sr
             if self.asr_mode == "local":
-                t = asr.transcribe(y_slice, sr, use_fallback=False)
+                t = asr.transcribe(y_slice, sr, use_fallback=False, engine="local")
+            elif self.asr_mode == "mlx":
+                t = asr.transcribe(y_slice, sr, use_fallback=False, engine="mlx")
             else:
-                t = asr.transcribe(y_slice, sr, use_fallback=True)
+                t = asr.transcribe(y_slice, sr, use_fallback=True, engine="auto")
 
             if t.get("has_content"):
                 all_text.append(t["text"])
@@ -423,9 +428,11 @@ class Pipeline:
             return {"files": 0, "total_dur_s": 0, "est_time_s": 0, "est_time_str": "0s"}
 
         total_dur = sum(dur for _, dur in candidates)
-        # ASR 估算：本地 ~0.3x 实时，云端 ~0.5x 实时 + 网络开销
+        # ASR 估算：MLX ~0.15x 实时，funasr ~0.3x，云端 ~0.5x + 网络开销
         if self.asr_mode == "aliyun":
-            est_time = total_dur * 0.5 + len(candidates) * 2  # 每文件 2s 网络开销
+            est_time = total_dur * 0.5 + len(candidates) * 2
+        elif self.asr_mode == "mlx":
+            est_time = total_dur * 0.15  # M 系列芯片 MLX Qwen3-ASR
         else:
             est_time = total_dur * 0.3
 

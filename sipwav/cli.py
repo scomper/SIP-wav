@@ -613,7 +613,7 @@ def cmd_task(args):
 
 
 def cmd_notification(args):
-    """通知模式 — 语音通知送达验证（头部匹配 + 送达比）"""
+    """模式 D — 内容匹配验证（头部匹配 + 送达度 + 吞字检测）"""
     if not _lazy_imports():
         return
     from .pipeline import Pipeline
@@ -645,7 +645,7 @@ def cmd_notification(args):
         print(f"  ⚠️ 除参考样本外没有其他 WAV 文件")
         return
 
-    print(f"\n  📢 语音通知送达验证")
+    print(f"\n  📢 内容匹配验证")
     print(f"  参考样本: {os.path.basename(sample_path)}")
     print(f"  待检文件: {len(files)} 个")
     print(f"  头部匹配: {head_seconds}s")
@@ -1066,8 +1066,8 @@ def cmd_interactive(args):
     print()
     print("    1  模式 A -- 波形快速筛查（静音/纯音/截断/能量）")
     print("    2  模式 A+B -- 波形筛查 + 样本锚定比对")
-    print("    3  模式 A+B+C -- 全管线（波形 + 锚定 + ASR 内容）")
-    print("    4  模式 D -- 语音通知送达验证")
+    print("    3  模式 D -- 内容匹配验证（头部匹配 + 送达度）")
+    print("    4  模式 A+B+C -- 全管线（波形 + 锚定 + ASR 内容）")
     print()
     print("    r  恢复上次任务  d  环境诊断  q  退出")
     print()
@@ -1102,8 +1102,8 @@ def cmd_interactive(args):
         return
     print(f"  [*] {len(files)} 个 WAV 文件")
 
-    # 模式 D：通知验证
-    if choice == "4":
+    # 模式 D：内容匹配验证
+    if choice == "3":
         sample_path = _pick_sample_interactive(dir_path)
         if sample_path is None:
             return
@@ -1118,17 +1118,17 @@ def cmd_interactive(args):
         cmd_notification(notif_args)
         return
 
-    # 模式 B/C：选择参考样本
+    # 模式 A+B / A+B+C：选择参考样本
     sample_path = None
     asr_mode = "auto"
-    if choice in ("2", "3"):
+    if choice in ("2", "4"):
         sample_path = _pick_sample_interactive(dir_path)
         if sample_path is None:
             return
 
     # 直接开跑（默认参数：静音 2s，ASR auto）
     silence = 2.0
-    mode_names = {"1": "A", "2": "A+B", "3": "A+B+C"}
+    mode_names = {"1": "A", "2": "A+B", "4": "A+B+C"}
     print(f"\n  ▶ 模式 {mode_names[choice]} · {len(files)} 文件 · 静音 >{silence}s")
     if sample_path:
         print(f"    参考: {os.path.basename(sample_path)}")
@@ -1140,7 +1140,7 @@ def cmd_interactive(args):
         sample=sample_path,
         mode="quality",
         head_seconds=5.0,
-        asr=(choice == "3"),
+        asr=(choice == "4"),
         asr_mode=asr_mode,
         phases="123",
         codec="auto",
@@ -1249,12 +1249,12 @@ def main():
     p_task.add_argument("--dir", required=True, help="待检目录")
     p_task.add_argument("--sample", "-s", help="参考样本 WAV (样本锚定模式)")
     p_task.add_argument("--mode", choices=["quality", "notification"], default="quality",
-                        help="检测模式: quality=异常检测(默认), notification=语音通知送达验证")
+                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证")
     p_task.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
                         help="通知模式头部匹配秒数 (默认 5s)")
     p_task.add_argument("--asr", action=argparse.BooleanOptionalAction, default=True,
                         help="启用 ASR 内容分析 (默认开，--no-asr 关闭)")
-    p_task.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
+    p_task.add_argument("--asr-mode", choices=["local", "mlx", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
     p_task.add_argument("--asr-model", default=None,
                         help="云端 ASR 模型: qwen3-asr-flash-filetrans (默认) / paraformer-8k-v2 / fun-asr")
@@ -1275,11 +1275,11 @@ def main():
     p_scan.add_argument("--dir", required=True, help="待检目录")
     p_scan.add_argument("--sample", "-s", help="参考样本 WAV")
     p_scan.add_argument("--mode", choices=["quality", "notification"], default="quality",
-                        help="检测模式: quality=异常检测(默认), notification=语音通知送达验证")
+                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证")
     p_scan.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
                         help="通知模式头部匹配秒数 (默认 5s)")
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
-    p_scan.add_argument("--asr-mode", choices=["local", "aliyun", "auto"], default="auto",
+    p_scan.add_argument("--asr-mode", choices=["local", "mlx", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
     p_scan.add_argument("--asr-model", default=None,
                         help="云端 ASR 模型: qwen3-asr-flash-filetrans (默认) / paraformer-8k-v2 / fun-asr")
