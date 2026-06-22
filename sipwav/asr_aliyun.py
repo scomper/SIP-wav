@@ -1,6 +1,7 @@
-"""阿里云百炼 ASR 回退 — 上传文件到百炼 → 异步转写"""
+"""阿里云百炼 ASR 回退 — 上传文件到百炼 → 异步转写（带进度反馈）"""
 
 import os
+import sys
 import time
 import warnings
 import tempfile
@@ -56,17 +57,25 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
 
     import httpx
 
+    def _progress(msg):
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
     try:
         t_start = time.time()
         headers = {"Authorization": f"Bearer {api_key}"}
+        dur_s = len(y) / sr
 
         # Step 1: 保存为临时 WAV
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         try:
             sf.write(tmp.name, y, sr, subtype="PCM_16")
             tmp.close()
+            file_size_mb = os.path.getsize(tmp.name) / 1024 / 1024
 
-            # Step 2: httpx 上传（绕过 dashscope SDK 的 SSL 兼容问题）
+            # Step 2: httpx 上传
+            _progress(f"    上传中 ({file_size_mb:.1f}MB)...")
+            t_upload = time.time()
             with open(tmp.name, "rb") as f:
                 upload_resp = httpx.post(
                     "https://dashscope.aliyuncs.com/api/v1/files",
@@ -76,17 +85,20 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
                     timeout=120,
                 )
             if upload_resp.status_code != 200:
+                _progress(f" 失败\n")
                 return {"text": "", "error": f"上传失败: {upload_resp.status_code}", "provider": "aliyun"}
 
             file_id = upload_resp.json().get("data", {}).get("uploaded_files", [{}])[0].get("file_id", "")
             if not file_id:
-                return {"text": "", "error": f"获取 file_id 失败: {upload_resp.text[:100]}", "provider": "aliyun"}
+                _progress(f" 失败\n")
+                return {"text": "", "error": f"获取 file_id 失败", "provider": "aliyun"}
 
-            # Step 3: 用 file_id 获取下载 URL
+            _progress(f" {time.time()-t_upload:.1f}s\n")
+
+            # Step 3: 获取下载 URL
             file_info = httpx.get(
                 f"https://dashscope.aliyuncs.com/api/v1/files/{file_id}",
-                headers=headers,
-                timeout=30,
+                headers=headers, timeout=30,
             )
             if file_info.status_code != 200:
                 return {"text": "", "error": f"获取文件信息失败: {file_info.status_code}", "provider": "aliyun"}
@@ -94,7 +106,8 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
             if not file_url:
                 return {"text": "", "error": "获取下载 URL 失败", "provider": "aliyun"}
 
-            # Step 3: 提交转写（Qwen3 用 file_url 单数，其他用 file_urls 复数）
+            # Step 4: 提交转写
+            _progress(f"    提交转写 ({ASR_MODEL})...")
             if "qwen3" in ASR_MODEL:
                 task_body = {"model": ASR_MODEL, "input": {"file_url": file_url}}
             else:
@@ -103,35 +116,43 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
             submit_resp = httpx.post(
                 "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "X-DashScope-Async": "enable"},
-                json=task_body,
-                timeout=30,
+                json=task_body, timeout=30,
             )
             if submit_resp.status_code != 200:
+                _progress(f" 失败\n")
                 return {"text": "", "error": f"提交失败: {submit_resp.status_code}", "elapsed_s": round(time.time() - t_start, 2), "provider": "aliyun"}
 
             task_id = submit_resp.json().get("output", {}).get("task_id", "")
-            if not task_id:
-                return {"text": "", "error": "获取 task_id 失败", "provider": "aliyun"}
+            _progress(f" OK\n")
 
-            # Step 4: 轮询结果（最长 5 分钟）
+            # Step 5: 轮询结果（带进度点）
+            _progress(f"    识别中 ({dur_s:.0f}s 录音)")
             headers_poll = {"Authorization": f"Bearer {api_key}"}
-            for _ in range(60):
+            for i in range(120):
                 time.sleep(5)
                 poll = httpx.get(f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}", headers=headers_poll, timeout=15)
                 if poll.status_code != 200:
+                    _progress(".")
                     continue
                 output = poll.json().get("output", {})
                 status = output.get("task_status", "")
+                elapsed = time.time() - t_start
+                _progress(".")
+                if i > 0 and i % 6 == 0:
+                    _progress(f" {elapsed:.0f}s")
                 if status == "SUCCEEDED":
+                    _progress(f" {elapsed:.0f}s\n")
                     break
                 elif status in ("FAILED", "UNKNOWN"):
-                    return {"text": "", "error": f"转写失败: {output.get('message', status)}", "elapsed_s": round(time.time() - t_start, 2), "provider": "aliyun"}
+                    _progress(f" 失败: {output.get('message', '')}\n")
+                    return {"text": "", "error": f"转写失败: {output.get('message', status)}", "elapsed_s": round(elapsed, 2), "provider": "aliyun"}
             else:
-                return {"text": "", "error": "转写超时（5分钟）", "provider": "aliyun"}
+                _progress(f" 超时\n")
+                return {"text": "", "error": "转写超时（10分钟）", "provider": "aliyun"}
 
             elapsed = time.time() - t_start
 
-            # Step 5: 获取结果
+            # Step 6: 获取结果
             text = ""
             for r in output.get("results", []):
                 tx_url = r.get("transcription_url", "")
