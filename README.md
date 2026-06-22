@@ -129,6 +129,34 @@ sipcheck scan --dir ./records/ --asr --asr-mode aliyun
 sipcheck scan --dir ./records/ --sample ref.wav --asr --asr-mode aliyun
 ```
 
+### ASR Model Selection
+
+Default model is `qwen3-asr-flash-filetrans` (best accuracy, supports any sample rate).
+
+Switch model via CLI:
+```bash
+# Use Qwen3-ASR (default, best accuracy)
+sipcheck scan --dir ./records/ --asr --asr-model qwen3-asr-flash-filetrans
+
+# Use Paraformer (supports hotwords, 8kHz optimized)
+sipcheck scan --dir ./records/ --asr --asr-model paraformer-8k-v2
+
+# Use Fun-ASR (industrial grade, supports hotwords)
+sipcheck scan --dir ./records/ --asr --asr-model fun-asr
+```
+
+Or via environment variable:
+```bash
+export SIPWAV_ASR_MODEL=paraformer-8k-v2
+sipcheck scan --dir ./records/ --asr
+```
+
+| Model | Accuracy | Hotwords | Sample Rate | Speed |
+|-------|----------|----------|-------------|-------|
+| `qwen3-asr-flash-filetrans` | Best | No | Any | ~17s/10min |
+| `paraformer-8k-v2` | Good | Yes | 8kHz | ~16s/10min |
+| `fun-asr` | Good | Yes | Any | ~15s/10min |
+
 > 环境检测会自动选择推荐模式（无 funasr 时自动切 aliyun）。
 
 ### ASR Models
