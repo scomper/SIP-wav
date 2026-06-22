@@ -557,9 +557,16 @@ class Pipeline:
         elapsed = time.time() - t0
         delivered = sum(1 for r in results if r["status"] == "delivered")
         partial = sum(1 for r in results if r["status"] == "partial")
+        truncated = sum(1 for r in results if r["status"] == "truncated_start")
         no_match = sum(1 for r in results if r["status"] in ("no_match", "no_voice"))
         errors = sum(1 for r in results if r["status"] == "error")
-        print(f" {delivered} 已送达 / {partial} 部分送达 / {no_match} 未匹配 / {_format_elapsed(elapsed)}")
+        parts = [f"{delivered} 已送达"]
+        if partial:
+            parts.append(f"{partial} 部分送达")
+        if truncated:
+            parts.append(f"{truncated} 吞字")
+        parts.append(f"{no_match} 未匹配")
+        print(f" {' / '.join(parts)} / {_format_elapsed(elapsed)}")
 
         self.notification_results = results
         self.phase_times["notification"] = elapsed
@@ -571,6 +578,7 @@ class Pipeline:
                 "total": len(results),
                 "delivered": delivered,
                 "partial": partial,
+                "truncated_start": truncated,
                 "no_match": no_match,
                 "errors": errors,
                 "elapsed_s": round(elapsed, 1),

@@ -258,10 +258,16 @@ def format_notification_report(notif_result: dict, elapsed_s: float = 0,
             ratio_str = "-"
             hangup_str = "-"
 
-        status = _STATUS_ICON.get(r.get("status", "error"), "❓ 未知")
+        status = r.get("status", "error")
+        status_icon = _STATUS_ICON.get(status, "❓ 未知")
+
+        # truncated_start 追加吞字位置
+        extra = ""
+        if status == "truncated_start" and r.get("match_position_s") is not None:
+            extra = f" (吞字@{r['match_position_s']:.0f}s)"
 
         lines.append(
-            f"  {basename:30s}  {dur_str:>6s}  {sim_str:>6s}  {ratio_str:>6s}  {hangup_str:>7s}  {status}"
+            f"  {basename:30s}  {dur_str:>6s}  {sim_str:>6s}  {ratio_str:>6s}  {hangup_str:>7s}  {status_icon}{extra}"
         )
 
     lines.append("")
@@ -270,12 +276,15 @@ def format_notification_report(notif_result: dict, elapsed_s: float = 0,
     d = summary.get("delivered", 0)
     p = summary.get("partial", 0)
     n = summary.get("no_match", 0)
+    ts = summary.get("truncated_start", 0)
     err = summary.get("errors", 0)
     total = summary.get("total", 0)
 
     parts = [f"已送达 {d}"]
     if p > 0:
         parts.append(f"部分送达 {p}")
+    if ts > 0:
+        parts.append(f"吞字 {ts}")
     if n > 0:
         parts.append(f"未匹配 {n}")
     if err > 0:

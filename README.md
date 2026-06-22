@@ -86,13 +86,12 @@ sipcheck task --dir ./records/ --sample ref.wav --silence 2
 | `sipcheck` | Interactive mode (select mode → input directory → auto run) |
 | `sipcheck doctor` | Environment diagnostics |
 | `sipcheck task --dir ./records/` | Task mode (supports resume) |
-| `sipcheck task --dir ./records/ --sample ref.wav --mode notification` | Voice notification delivery verification |
 | `sipcheck scan --dir ./records/` | Simple batch scan |
 | `sipcheck info file.wav` | View single file details |
 | `sipcheck view file.wav -d 60 --open` | Waveform SVG visualization |
 | `sipcheck gen "Your verification code is 123456" --output ref.wav` | TTS generate reference voice |
 | `sipcheck task --dir ./records/ --sample ref.wav --mode notification` | Voice notification delivery verification |
-| `sipcheck task --dir ./records/ --sample ref.wav --mode notification --head-seconds 10` | Notification mode with 10s head matching |
+| `sipcheck task --dir ./records/ --sample ref.wav --mode notification --head-seconds 10` | Notification with 10s head matching |
 
 ### Parameters
 

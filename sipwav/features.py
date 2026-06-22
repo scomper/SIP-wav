@@ -577,8 +577,58 @@ def run_notification_check(y_ref: np.ndarray, sr_ref: int,
             result["status"] = "partial"
         else:
             result["status"] = "no_match"
+    else:
+        # 头部不匹配 → 滑动窗口搜索：录音内容在参考样本的哪个位置（吞字检测）
+        position = _find_match_position(y_ref, sr_ref, y_test, sr_test, head_seconds)
+        if position is not None:
+            result["match_position_s"] = round(position, 1)
+            result["status"] = "truncated_start"
+            # 从匹配点开始计算送达度
+            match_sample = int(position * sr_ref)
+            delivery = compute_delivery_ratio(
+                y_ref, sr_ref, y_test, sr_test,
+                match_sample, test_start,
+            )
+            result["delivery"] = delivery
 
     return result
+
+
+def _find_match_position(y_ref, sr_ref, y_test, sr_test, head_seconds, step_seconds=2.0):
+    """滑动窗口定位：在参考样本中搜索录音内容出现的位置
+
+    从参考样本的每个 step_seconds 偏移处截取头部，与录音头部比较 MFCC。
+    返回最佳匹配位置（秒），未找到返回 None。
+    """
+    test_start = find_first_voice_frame(y_test, sr_test)
+    test_head = extract_head_features(y_test, sr_test, head_seconds, test_start)
+    if test_head is None:
+        return None
+
+    ref_dur = len(y_ref) / sr_ref
+    best_sim = 0.0
+    best_pos = None
+
+    # 从参考样本的第 1s 开始，每隔 step_seconds 滑动一次
+    pos = 1.0
+    while pos < ref_dur - head_seconds:
+        ref_start_sample = int(pos * sr_ref)
+        ref_head = extract_head_features(y_ref, sr_ref, head_seconds, ref_start_sample)
+        if ref_head is None:
+            pos += step_seconds
+            continue
+
+        sim = head_match_similarity(ref_head["mfcc"], test_head["mfcc"])
+        if sim > best_sim:
+            best_sim = sim
+            best_pos = pos
+
+        pos += step_seconds
+
+    # 需要超过较低阈值才算找到（0.6 — 比头部匹配的 0.9 宽松，因为是搜索模式）
+    if best_sim > 0.6 and best_pos is not None:
+        return best_pos
+    return None
 
 
 # ─── Self-test ─────────────────────────────────────────────────────
