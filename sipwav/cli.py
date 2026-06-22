@@ -865,10 +865,11 @@ def _pick_sample_interactive(work_dir: str) -> str | None:
     pkg_sample = pathlib.Path(__file__).parent.parent / "sample"
     candidates = []  # (显示名, 完整路径, 来源)
 
-    # 1. 项目 sample/ 目录
+    # 1. 项目 sample/ 目录（排除 ._ 元数据文件）
     if pkg_sample.is_dir():
         for f in sorted(pkg_sample.glob("*.wav")):
-            candidates.append((f.name, str(f), "sample/"))
+            if not f.name.startswith("._"):
+                candidates.append((f.name, str(f), "sample/"))
 
     # 2. 工作目录中含 "正常"/"ref"/"normal" 的文件
     for f in sorted(pathlib.Path(work_dir).glob("*.wav")):

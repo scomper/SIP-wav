@@ -38,19 +38,20 @@ def _suppress_output():
 
 
 def _get_asr_model():
-    """单例加载 ASR 模型"""
+    """单例加载 ASR 模型（funasr 未安装时返回 None）"""
     global _ASR_MODEL
     if _ASR_MODEL is not None:
         return _ASR_MODEL
     with _ASR_LOCK:
         if _ASR_MODEL is not None:
             return _ASR_MODEL
-        os.environ["FUNASR_LOG_LEVEL"] = "40"
-        os.environ["MODELSCOPE_LOG_LEVEL"] = "40"
+        try:
+            os.environ["FUNASR_LOG_LEVEL"] = "40"
+            os.environ["MODELSCOPE_LOG_LEVEL"] = "40"
 
-        with _suppress_output():
-            from funasr import AutoModel
-            _ASR_MODEL = AutoModel(
+            with _suppress_output():
+                from funasr import AutoModel
+                _ASR_MODEL = AutoModel(
                 model="iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
                 vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
                 punc_model="iic/punc_ct-transformer_cn-en-common-vocab471067-large",
@@ -60,12 +61,16 @@ def _get_asr_model():
                 disable_log=True,
                 log_level="ERROR",
             )
+        except (ImportError, Exception):
+            return None
     return _ASR_MODEL
 
 
 def _local_transcribe(y: np.ndarray, sr: int) -> dict:
     """funasr 本地 ASR 转写，返回带时间戳的分段结果"""
     model = _get_asr_model()
+    if model is None:
+        return {"text": "", "has_content": False, "segments": [], "numbers": [], "provider": "funasr", "error": "funasr 未安装"}
     if sr != 16000:
         y = librosa.resample(y, orig_sr=sr, target_sr=16000)
     raw = model.generate(input=y)
