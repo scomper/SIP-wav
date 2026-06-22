@@ -187,23 +187,23 @@ export SIPWAV_ASR_MODEL=paraformer-8k-v2
 sipcheck scan --dir ./records/
 ```
 
-### Notification Mode (语音通知送达验证)
+### 语音通知送达验证 (Notification Mode)
 
-For voice notification scenarios where recordings vary in length (user hangs up at different points), use `--mode notification`. This mode uses **head matching** instead of full-file comparison:
+语音通知场景下，录音时长不固定（用户在不同时间点挂断）。使用 `--mode notification` 启用**头部匹配 + 滑动窗口搜索**双层检测：
 
 ```bash
 sipcheck task --dir ./records/ --sample notify.wav --mode notification
 sipcheck task --dir ./records/ --sample notify.wav --mode notification --head-seconds 10
 ```
 
-**How it works:**
-1. Extract the first N seconds of the reference sample as "head" features (MFCC)
-2. For each recording: find the notification start point, compare head features
-3. If head matches (similarity ≥ 0.9): calculate delivery ratio by comparing energy envelopes
-4. If head doesn't match: **sliding window search** — scan through the reference to find where the recording content appears (detects "truncation" — recording start was lost)
-5. Report: delivery ratio, hangup point, status
+**检测流程：**
+1. 提取参考样本和录音的前 N 秒 MFCC 特征（头部匹配）
+2. 相似度 ≥ 0.9 → 匹配成功，逐窗口计算送达比例
+3. 相似度 < 0.9 → 进入滑动窗口搜索：在参考样本中逐段滑动，定位录音内容出现的位置
+4. 找到位置 → 判定为**吞字**（录音开头丢失），报告截断起始点
+5. 未找到 → 判定为未匹配
 
-**Output example:**
+**输出示例：**
 ```
 文件名                时长    相似度   送达度   挂断点   状态
 1380001_0618.wav      65s     1.00     100%     600s    ✅ 已送达
@@ -212,14 +212,14 @@ sipcheck task --dir ./records/ --sample notify.wav --mode notification --head-se
 1380004_0618.wav      12s     0.12       0%       -     ❌ 未匹配
 ```
 
-**Status types:**
-| Status | Meaning |
-|--------|---------|
-| ✅ 已送达 | Notification played completely (≥95%) |
-| ⚠️ 部分送达 | Notification played partially, user hung up early |
-| ⚠️ 吞字@Xs | Recording start was lost (truncation), content matches reference from position X |
-| ❌ 未匹配 | Recording doesn't match the reference notification |
-| ❌ 无语音 | No voice content detected |
+**状态说明：**
+| 状态 | 含义 |
+|------|------|
+| ✅ 已送达 | 通知完整播放（≥95%） |
+| ⚠️ 部分送达 | 通知播放了一部分，用户提前挂断 |
+| ⚠️ 吞字@Xs | 录音开头丢失（线路异常），内容从参考样本第 X 秒处开始匹配 |
+| ❌ 未匹配 | 录音内容与参考通知无关 |
+| ❌ 无语音 | 未检测到语音内容 |
 
 ### 阿里云百炼 API Key 配置
 
