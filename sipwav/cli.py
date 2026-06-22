@@ -427,6 +427,7 @@ def cmd_task(args):
     if not _lazy_imports():
         return
     from .pipeline import Pipeline
+    import numpy as np
 
     _apply_env_defaults(args)
     work_dir = args.work_dir or args.dir
@@ -474,15 +475,19 @@ def cmd_task(args):
     if task["config"]["sample"]:
         sample_path = task["config"]["sample"]
         if not os.path.exists(sample_path):
-            print(f"❌ 参考样本不存在: {sample_path}")
+            print(f"  [X] 参考样本不存在: {sample_path}")
             return
-        print(f"📌 参考样本: {sample_path}")
+        print(f"  [*] 参考样本: {os.path.basename(sample_path)}")
         y_ref, sr_ref = feat.load_wav(sample_path)
         ref_profile = aligner.extract_reference_profile(y_ref, sr_ref)
         ref_vad = feat.vad_segments(y_ref, sr_ref)
         ref_vad_segments = ref_vad.get("segments")
-        print(f"  时长: {ref_profile['duration_s']:.1f}s | 能量: {ref_profile['rms_mean']:.4f}")
-        # ASR 参考文本延迟到 L1+L2 完成后提取（先筛选再识别）
+        # 显示参考样本完整参数
+        print(f"      时长:   {ref_profile['duration_s']:.1f}s")
+        print(f"      能量:   {ref_profile['rms_mean']:.4f}")
+        print(f"      采样率: {sr_ref} Hz")
+        print(f"      编码:   {codec.upper()}")
+        # ASR 参考文本延迟到 L1+L2 完成后提取
 
     task["status"] = "running"
     tm.save_task(task)
@@ -493,7 +498,6 @@ def cmd_task(args):
     silence_threshold = getattr(args, 'silence', 2.0)
 
     # ─── 分阶段管线 ───
-    # 参考样本不参与检测
     sample_path = task["config"].get("sample")
     pipe = Pipeline(files, ref_profile, ref_vad_segments, ref_asr_text,
                     enable_asr, asr_mode, phases=phases,
@@ -507,45 +511,60 @@ def cmd_task(args):
     if ref_profile is not None:
         pipe.run_phase2()
 
-    if enable_asr:
-        # ASR 确认：列出候选文件 + 预估时间，让用户选择是否继续
-        est = pipe.estimate_asr_time()
-        if est["files"] == 0:
+    # ─── 候选文件列表 + 基本参数 ───
+    candidates = pipe.get_asr_candidates()
+
+    if not candidates:
+        # 无匹配文件，结束
+        if enable_asr:
             print(f"\n  [i] L1+L2 筛选后无匹配文件，跳过 ASR")
-        else:
-            # 先提取参考样本 ASR 文本（延迟到确认有候选后才做）
-            if ref_asr_text is None and sample_path:
-                print(f"\n  [ASR] 识别参考样本文本...")
-                if asr_mode == "aliyun":
-                    from . import asr_aliyun
-                    api_key = asr_aliyun._get_api_key()
-                    ref_asr = asr_aliyun.transcribe(y_ref, sr_ref, api_key=api_key)
-                else:
-                    ref_asr = asr.transcribe(y_ref, sr_ref)
-                ref_asr_text = ref_asr["text"]
-                ref_numbers = ref_asr.get("numbers", [])
-                pipe.ref_asr_text = ref_asr_text
-                pipe.ref_numbers = ref_numbers or []
-                if ref_asr_text:
-                    print(f"  [ASR] 参考文本: [{ref_asr_text[:60]}{'...' if len(ref_asr_text)>60 else ''}]")
-                else:
-                    print(f"  [ASR] 参考样本无语音内容")
-            print(f"\n  🔍 ASR 候选: {est['files']} 文件")
-            print(f"     总录音时长: {_format_elapsed(est['total_dur_s'])}")
-            print(f"     预估耗时: {est['est_time_str']}")
-            # 列出候选文件名
-            candidates = pipe.get_asr_candidates()
-            for fpath, dur in candidates[:10]:
-                print(f"       • {os.path.basename(fpath)} ({dur:.0f}s)")
-            if len(candidates) > 10:
-                print(f"       ... 共 {len(candidates)} 文件")
-            print()
+    else:
+        # 列出候选文件 + 基本参数
+        print(f"\n  匹配文件 ({len(candidates)} 个):")
+        print(f"  {'文件名':30s}  {'时长':>8s}  {'能量':>8s}  {'采样率':>8s}")
+        print(f"  {'-'*30}  {'-'*8}  {'-'*8}  {'-'*8}")
+        for fpath, dur in candidates:
+            r = pipe.l1_results.get(fpath, {})
+            y_f = r.get("y")
+            sr_f = r.get("sr", 0)
+            rms_f = float(np.sqrt(np.mean(y_f**2))) if y_f is not None else 0
+            name = os.path.basename(fpath)[:30]
+            print(f"  {name:30s}  {dur:>7.0f}s  {rms_f:>8.4f}  {sr_f:>7d}Hz")
+
+        if enable_asr:
+            # 预估 ASR 时间
+            est = pipe.estimate_asr_time()
+            print(f"\n  [ASR] 预估耗时: {est['est_time_str']} (总录音 {_format_elapsed(est['total_dur_s'])})")
+
+            # 交互模式询问是否继续
             if getattr(args, 'interactive', False):
                 confirm = _prompt("  继续 ASR 分析？[Y/n]: ").lower()
                 if confirm in ("n", "no"):
-                    print("  ⏭  跳过 ASR")
+                    print("  跳过 ASR")
                     enable_asr = False
+
             if enable_asr:
+                # 提取参考样本 ASR 文本
+                if ref_asr_text is None and sample_path:
+                    print(f"\n  [ASR] 识别参考样本...")
+                    if asr_mode == "aliyun":
+                        from . import asr_aliyun
+                        api_key = asr_aliyun._get_api_key()
+                        ref_asr = asr_aliyun.transcribe(y_ref, sr_ref, api_key=api_key)
+                    else:
+                        ref_asr = asr.transcribe(y_ref, sr_ref)
+                    ref_asr_text = ref_asr["text"]
+                    ref_numbers = ref_asr.get("numbers", [])
+                    pipe.ref_asr_text = ref_asr_text
+                    pipe.ref_numbers = ref_numbers or []
+                    if ref_asr_text:
+                        excerpt = ref_asr_text[:80]
+                        suffix = "..." if len(ref_asr_text) > 80 else ""
+                        print(f"  [ASR] 参考内容节选: [{excerpt}{suffix}]")
+                    else:
+                        print(f"  [ASR] 参考样本无语音内容")
+
+                # 执行 ASR 分析
                 pipe.run_phase3()
 
     # ─── 汇总 ───
