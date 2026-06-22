@@ -526,7 +526,7 @@ def run_notification_check(y_ref: np.ndarray, sr_ref: int,
             "ref_start_s": float,
             "test_start_s": float,
             "delivery": dict | None,
-            "status": str,  # "delivered" / "partial" / "no_match" / "no_voice"
+            "status": str,  # "delivered" / "partial" / "truncated_start" / "no_match" / "no_voice"
         }
     """
     ref_start = find_first_voice_frame(y_ref, sr_ref)

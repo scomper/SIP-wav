@@ -201,11 +201,12 @@ def save_json_report(results: list[dict], total: int, output_path: str):
 # ─── 通知送达报告 ────────────────────────────────────────────────
 
 _STATUS_ICON = {
-    "delivered": "✅ 已送达",
-    "partial":   "⚠️ 部分送达",
-    "no_match":  "❌ 未匹配",
-    "no_voice":  "❌ 无语音",
-    "error":     "❌ 错误",
+    "delivered":       "✅ 已送达",
+    "partial":         "⚠️ 部分送达",
+    "truncated_start": "⚠️ 吞字",
+    "no_match":        "❌ 未匹配",
+    "no_voice":        "❌ 无语音",
+    "error":           "❌ 错误",
 }
 
 
