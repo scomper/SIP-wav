@@ -31,18 +31,17 @@ QWEN3_PARAMS = {
 
 
 def _get_api_key() -> str:
-    """获取百炼 API Key：优先环境变量，其次 CSV 文件"""
+    """获取百炼 API Key：环境变量 > ~/.config/sipwav/api-key"""
     key = os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("ALIYUN_ASR_API_KEY", "")
     if key:
         return key
-    # 尝试从下载的 CSV 读取
-    csv_path = os.path.expanduser("~/Downloads/主账号空间-***REMOVED***.csv")
-    if os.path.exists(csv_path):
-        with open(csv_path, encoding="utf-8-sig") as f:
-            for line in f:
-                parts = line.strip().split(",", 1)
-                if len(parts) == 2 and parts[0] == "apiKey":
-                    return parts[1]
+    # 尝试从配置文件读取
+    key_file = os.path.expanduser("~/.config/sipwav/api-key")
+    if os.path.exists(key_file):
+        with open(key_file) as f:
+            key = f.read().strip()
+        if key:
+            return key
     return ""
 
 

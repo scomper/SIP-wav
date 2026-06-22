@@ -141,7 +141,7 @@ sipcheck task --dir ./records/ --sample ref.wav --silence 2
 | `--mode quality` | 质量检测模式（默认） |
 | `--mode notification` | 内容匹配验证（头部匹配 + 送达度 + 吞字检测） |
 | `--sample ref.wav` | 参考样本（模式 B/C） |
-| `--head-seconds 5` | 通知模式头部匹配时长（默认 5 秒） |
+| `--head-seconds 5` | 内容匹配头部匹配时长（默认 5 秒） |
 | `--silence 2` | 静音阈值（秒），默认 2.0 |
 | `--asr` | 启用 ASR 内容分析 |
 | `--asr-mode aliyun` | ASR 模式：`local` / `aliyun` / `auto` |
@@ -233,10 +233,15 @@ sipcheck scan --dir ./records/
 1. 登录 [阿里云百炼控制台](https://bailian.console.aliyun.com/)
 2. 左侧菜单 → **API Key 管理** → **创建 API Key**
 3. 复制生成的 Key（格式 `sk-ws-...`）
-4. 在项目根目录创建 `.env` 文件：
+4. 配置方式（二选一）：
 
 ```bash
-echo "DASHSCOPE_API_KEY=sk-ws-你的Key" > .env
+# 方式 A：环境变量（推荐）
+export DASHSCOPE_API_KEY=sk-ws-你的Key
+
+# 方式 B：配置文件（持久化）
+mkdir -p ~/.config/sipwav
+echo "sk-ws-你的Key" > ~/.config/sipwav/api-key
 ```
 
 > **定价参考**：Paraformer 模型 ¥0.003/秒（约 ¥0.18/分钟），新用户有免费额度。
