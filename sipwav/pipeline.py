@@ -229,13 +229,9 @@ class Pipeline:
         t0 = time.time()
         from . import asr_handler as asr
 
-        # 排除已确认异常和被过滤的文件
-        candidates = [f for f in self.l1_results if f not in self.errors and f not in self.filtered_files]
-        if self.l2_results:
-            candidates = [
-                f for f in candidates
-                if f not in self.l2_results or not self.l2_results[f].get("flags")
-            ]
+        # 复用 get_asr_candidates 的过滤逻辑（时长+静音，L1 其他标记不排除）
+        candidate_pairs = self.get_asr_candidates()
+        candidates = [f for f, _ in candidate_pairs]
 
         # 抽样控制
         max_asr = getattr(self, 'max_asr_files', 100)
@@ -378,22 +374,30 @@ class Pipeline:
     def get_asr_candidates(self) -> list[tuple[str, float]]:
         """返回 Phase 3 的候选文件列表 (path, duration_s)
 
-        过滤条件：
-        1. 排除 L1 异常文件（波形筛查不通过）
-        2. 排除 L2 有 flags 的文件（样本比对不通过）
-        3. 排除被预过滤和出错的文件
+        过滤条件（只看时长和静音，L1 其他标记不排除）：
+        1. 时长比：与参考样本差异 <0.5 或 >2.0 → 排除
+        2. 静音段：静音占比过高 → 排除
+        3. L2 时长/包络不匹配 → 排除
+        4. 出错/预过滤的文件 → 排除
         """
+        ref_dur = self.ref_profile.get("duration_s", 0) if self.ref_profile else 0
         candidates = []
         for fpath, r in self.l1_results.items():
-            # L1 异常 → 不进 ASR
-            if r.get("l1", {}).get("verdict") == "abnormal":
-                continue
             if fpath in self.errors or fpath in self.filtered_files:
                 continue
-            # L2 有 flags → 不进 ASR
-            if fpath in self.l2_results and self.l2_results[fpath].get("flags"):
-                continue
             dur = len(r["y"]) / r["sr"]
+            # 条件1: 时长比（有参考样本时）
+            if ref_dur > 0:
+                ratio = dur / ref_dur
+                if ratio < 0.5 or ratio > 2.0:
+                    continue
+            # 条件2: 静音占比过高（有参考样本时检查 L2 flags）
+            if fpath in self.l2_results:
+                l2 = self.l2_results[fpath]
+                # L2 时长不匹配或包络不匹配 → 排除
+                if any(f in l2.get("flags", []) for f in ("too_short", "too_long", "envelope_mismatch")):
+                    continue
+            # L1 的截断/纯音/能量异常不排除，只在报告里展示
             candidates.append((fpath, dur))
         return candidates
 
