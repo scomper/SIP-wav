@@ -512,7 +512,7 @@ def compute_delivery_ratio(y_ref: np.ndarray, sr_ref: int,
 def run_notification_check(y_ref: np.ndarray, sr_ref: int,
                            y_test: np.ndarray, sr_test: int,
                            head_seconds: float = 5.0,
-                           head_threshold: float = 0.7) -> dict:
+                           head_threshold: float = 0.9) -> dict:
     """单文件通知检测 — 完整流程
 
     1. 找参考和录音的首个有声帧
