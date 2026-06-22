@@ -613,7 +613,7 @@ def cmd_task(args):
 
 
 def cmd_notification(args):
-    """模式 D — 内容匹配验证（头部匹配 + 送达度 + 吞字检测）"""
+    """模式 C — 内容匹配验证（头部匹配 + 送达度 + 吞字检测）"""
     if not _lazy_imports():
         return
     from .pipeline import Pipeline
@@ -1066,8 +1066,8 @@ def cmd_interactive(args):
     print()
     print("    1  模式 A -- 波形快速筛查（静音/纯音/截断/能量）")
     print("    2  模式 A+B -- 波形筛查 + 样本锚定比对")
-    print("    3  模式 D -- 内容匹配验证（头部匹配 + 送达度）")
-    print("    4  模式 A+B+C -- 全管线（波形 + 锚定 + ASR 内容）")
+    print("    3  模式 C -- 内容匹配验证（头部匹配 + 内容匹配长度）")
+    print("    4  模式 A+B+C -- 全管线（波形 + 锚定 + 内容匹配 + ASR 内容）")
     print()
     print("    r  恢复上次任务  d  环境诊断  q  退出")
     print()
@@ -1102,7 +1102,7 @@ def cmd_interactive(args):
         return
     print(f"  [*] {len(files)} 个 WAV 文件")
 
-    # 模式 D：内容匹配验证
+    # 模式 C：内容匹配验证
     if choice == "3":
         sample_path = _pick_sample_interactive(dir_path)
         if sample_path is None:
@@ -1249,7 +1249,7 @@ def main():
     p_task.add_argument("--dir", required=True, help="待检目录")
     p_task.add_argument("--sample", "-s", help="参考样本 WAV (样本锚定模式)")
     p_task.add_argument("--mode", choices=["quality", "notification"], default="quality",
-                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证")
+                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证(头部匹配+送达度+吞字)")
     p_task.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
                         help="通知模式头部匹配秒数 (默认 5s)")
     p_task.add_argument("--asr", action=argparse.BooleanOptionalAction, default=True,
@@ -1275,7 +1275,7 @@ def main():
     p_scan.add_argument("--dir", required=True, help="待检目录")
     p_scan.add_argument("--sample", "-s", help="参考样本 WAV")
     p_scan.add_argument("--mode", choices=["quality", "notification"], default="quality",
-                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证")
+                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证(头部匹配+送达度+吞字)")
     p_scan.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
                         help="通知模式头部匹配秒数 (默认 5s)")
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
