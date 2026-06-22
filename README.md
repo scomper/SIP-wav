@@ -86,20 +86,28 @@ sipcheck task --dir ./records/ --sample ref.wav --silence 2
 | `sipcheck` | Interactive mode (select mode → input directory → auto run) |
 | `sipcheck doctor` | Environment diagnostics |
 | `sipcheck task --dir ./records/` | Task mode (supports resume) |
+| `sipcheck task --dir ./records/ --sample ref.wav --mode notification` | Voice notification delivery verification |
 | `sipcheck scan --dir ./records/` | Simple batch scan |
 | `sipcheck info file.wav` | View single file details |
 | `sipcheck view file.wav -d 60 --open` | Waveform SVG visualization |
 | `sipcheck gen "Your verification code is 123456" --output ref.wav` | TTS generate reference voice |
+| `sipcheck task --dir ./records/ --sample ref.wav --mode notification` | Voice notification delivery verification |
+| `sipcheck task --dir ./records/ --sample ref.wav --mode notification --head-seconds 10` | Notification mode with 10s head matching |
 
 ### Parameters
 
 | Parameter | Description |
 |-----------|-------------|
-| `--sample ref.wav` | Reference sample (mode B/C) |
+| `--mode quality` | Quality detection mode (default) |
+| `--mode notification` | Voice notification delivery verification (head matching + delivery ratio) |
+| `--sample ref.wav` | Reference sample (mode B/C/notification) |
+| `--head-seconds 5` | Head matching duration for notification mode (default: 5s) |
 | `--silence 2` | Silence threshold (seconds), default 2.0 |
 | `--asr` | Enable ASR content analysis |
 | `--asr-mode aliyun` | ASR mode: `local` / `aliyun` / `auto` |
 | `--asr-model paraformer-8k-v2` | Cloud ASR model: `qwen3-asr-flash-filetrans` (default) / `paraformer-8k-v2` / `fun-asr` |
+| `--mode notification` | Voice notification delivery verification (head matching + delivery ratio) |
+| `--head-seconds 5` | Head matching duration (seconds), default 5.0 |
 | `-p 1` | L1 waveform screening only |
 | `-p 12` | L1 + L2 sample comparison |
 | `-p 123` | Full pipeline (default) |
@@ -178,6 +186,29 @@ sipcheck scan --dir ./records/ --asr-model qwen3-asr-flash-filetrans
 # Or via environment variable
 export SIPWAV_ASR_MODEL=paraformer-8k-v2
 sipcheck scan --dir ./records/
+```
+
+### Notification Mode (语音通知送达验证)
+
+For voice notification scenarios where recordings vary in length (user hangs up at different points), use `--mode notification`. This mode uses **head matching** instead of full-file comparison:
+
+```bash
+sipcheck task --dir ./records/ --sample notify.wav --mode notification
+sipcheck task --dir ./records/ --sample notify.wav --mode notification --head-seconds 10
+```
+
+**How it works:**
+1. Extract the first N seconds of the reference sample as "head" features (MFCC)
+2. For each recording: find the notification start point, compare head features
+3. If head matches (similarity > 0.7): calculate delivery ratio by comparing energy envelopes
+4. Report: delivery ratio, hangup point, status (delivered / partial / no match)
+
+**Output example:**
+```
+文件名                时长    相似度   送达度   挂断点   状态
+1380001_0618.wav      65s     1.00     100%     600s    ✅ 已送达
+1380002_0618.wav      18s     0.85      25%      15s    ⚠️ 部分送达
+1380003_0618.wav      35s     0.12       0%       -     ❌ 未匹配
 ```
 
 ### 阿里云百炼 API Key 配置

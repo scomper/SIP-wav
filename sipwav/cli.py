@@ -1067,11 +1067,12 @@ def cmd_interactive(args):
     print("    1  模式 A -- 波形快速筛查（静音/纯音/截断/能量）")
     print("    2  模式 A+B -- 波形筛查 + 样本锚定比对")
     print("    3  模式 A+B+C -- 全管线（波形 + 锚定 + ASR 内容）")
+    print("    4  模式 D -- 语音通知送达验证")
     print()
     print("    r  恢复上次任务  d  环境诊断  q  退出")
     print()
 
-    choice = _prompt("  选择 [1/2/3/r/d/q]: ").lower()
+    choice = _prompt("  选择 [1/2/3/4/r/d/q]: ").lower()
     if choice == "q":
         return
     elif choice == "d":
@@ -1080,7 +1081,7 @@ def cmd_interactive(args):
     elif choice == "r":
         _interactive_resume()
         return
-    elif choice not in ("1", "2", "3"):
+    elif choice not in ("1", "2", "3", "4"):
         print("  [X] 无效选择")
         return
 
@@ -1100,6 +1101,22 @@ def cmd_interactive(args):
         print(f"  [!] 没有 WAV 文件")
         return
     print(f"  [*] {len(files)} 个 WAV 文件")
+
+    # 模式 D：通知验证
+    if choice == "4":
+        sample_path = _pick_sample_interactive(dir_path)
+        if sample_path is None:
+            return
+        import argparse as _ap
+        notif_args = _ap.Namespace(
+            dir=dir_path,
+            sample=sample_path,
+            head_seconds=5.0,
+            work_dir=dir_path,
+            output=None,
+        )
+        cmd_notification(notif_args)
+        return
 
     # 模式 B/C：选择参考样本
     sample_path = None
@@ -1121,6 +1138,8 @@ def cmd_interactive(args):
     task_args = _ap.Namespace(
         dir=dir_path,
         sample=sample_path,
+        mode="quality",
+        head_seconds=5.0,
         asr=(choice == "3"),
         asr_mode=asr_mode,
         phases="123",
@@ -1216,6 +1235,7 @@ def main():
 示例:
   sipcheck task --dir ./录音/ --sample ref.wav
   sipcheck task --dir ./录音/ --silence 2
+  sipcheck task --dir ./录音/ --mode notification --sample notify.wav
   sipcheck info 异常.wav
   sipcheck view 异常.wav -d 60 --open
   sipcheck gen "您的验证码是123456" --output ref.wav
