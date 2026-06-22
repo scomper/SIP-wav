@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore")
 #   paraformer-8k-v2          — Paraformer（8k 电话录音专用，支持热词）
 #   fun-asr                   — Fun-ASR（工业级，支持热词）
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com"
-ASR_MODEL = os.environ.get("SIPWAV_ASR_MODEL", "qwen3-asr-flash-filetrans")
+ASR_MODEL = os.environ.get("SIPWAV_ASR_MODEL", "paraformer-8k-v2")
 
 
 def _get_api_key() -> str:
