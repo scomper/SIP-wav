@@ -1251,7 +1251,7 @@ def main():
     p_task.add_argument("--mode", choices=["quality", "notification"], default="quality",
                         help="检测模式: quality=异常检测(默认), notification=内容匹配验证(头部匹配+送达度+吞字)")
     p_task.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
-                        help="通知模式头部匹配秒数 (默认 5s)")
+                        help="内容匹配头部匹配秒数 (默认 5s)")
     p_task.add_argument("--asr", action=argparse.BooleanOptionalAction, default=True,
                         help="启用 ASR 内容分析 (默认开，--no-asr 关闭)")
     p_task.add_argument("--asr-mode", choices=["local", "mlx", "aliyun", "auto"], default="auto",
@@ -1277,7 +1277,7 @@ def main():
     p_scan.add_argument("--mode", choices=["quality", "notification"], default="quality",
                         help="检测模式: quality=异常检测(默认), notification=内容匹配验证(头部匹配+送达度+吞字)")
     p_scan.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
-                        help="通知模式头部匹配秒数 (默认 5s)")
+                        help="内容匹配头部匹配秒数 (默认 5s)")
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
     p_scan.add_argument("--asr-mode", choices=["local", "mlx", "aliyun", "auto"], default="auto",
                         help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
