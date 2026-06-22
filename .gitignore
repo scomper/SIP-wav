@@ -1,11 +1,35 @@
 # SIP-wav .gitignore
+
+# 敏感信息
 .env
+*.csv
+
+# 构建产物
 output/
 *.pyc
 __pycache__/
-.venv/
-.venv*/
-.alma-snapshots/
-.DS_Store
 *.egg-info/
 sipwav.egg-info/
+
+# 虚拟环境
+.venv/
+.venv*/
+
+# 临时文件（Bash 进程、测试输出等）
+tmp*
+number.txt
+*.tmp
+
+# 录音 / ASR 产出
+*.wav
+*.mp3
+*.json
+!sipwav/**/*.json
+
+# 运行时数据
+.sipcheck_task.json
+Users/
+
+# IDE / 系统
+.alma-snapshots/
+.DS_Store
