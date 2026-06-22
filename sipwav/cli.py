@@ -1066,8 +1066,8 @@ def cmd_interactive(args):
     print()
     print("    1  模式 A -- 波形快速筛查（静音/纯音/截断/能量）")
     print("    2  模式 A+B -- 波形筛查 + 样本锚定比对")
-    print("    3  模式 C -- 内容匹配验证（头部匹配 + 内容匹配长度）")
-    print("    4  模式 A+B+C -- 全管线（波形 + 锚定 + 内容匹配 + ASR 内容）")
+    print("    3  模式 D -- 内容匹配验证（头部匹配 + 送达度 + 吞字检测）")
+    print("    4  模式 A+B+C -- 全管线（波形 + 锚定 + ASR 内容）")
     print()
     print("    r  恢复上次任务  d  环境诊断  q  退出")
     print()
@@ -1102,7 +1102,7 @@ def cmd_interactive(args):
         return
     print(f"  [*] {len(files)} 个 WAV 文件")
 
-    # 模式 C：内容匹配验证
+    # 模式 D：内容匹配验证
     if choice == "3":
         sample_path = _pick_sample_interactive(dir_path)
         if sample_path is None:
