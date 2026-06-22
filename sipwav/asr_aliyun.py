@@ -90,7 +90,7 @@ def transcribe(y: np.ndarray, sr: int, api_key: Optional[str] = None) -> dict:
             )
             if file_info.status_code != 200:
                 return {"text": "", "error": f"获取文件信息失败: {file_info.status_code}", "provider": "aliyun"}
-            file_url = file_info.json().get("data", {}).get("download_url", "")
+            file_url = file_info.json().get("data", {}).get("url", "")
             if not file_url:
                 return {"text": "", "error": "获取下载 URL 失败", "provider": "aliyun"}
 
