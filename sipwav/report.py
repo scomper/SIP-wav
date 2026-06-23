@@ -20,6 +20,7 @@ _FLAG_ZH = {
     "content_mismatch": "内容不匹配",
     "no_speech": "无语音",
     "drift_detected": "时间漂移",
+    "duration_mismatch": "时长不匹配",
 }
 
 _MODE_NAMES = {

@@ -78,16 +78,33 @@ class Pipeline:
                     n_frames = wf.getnframes()
                     dur = n_frames / sr if sr > 0 else 0
 
+                reason = None
+
                 # 时长比检查
                 if ref_dur > 0:
                     ratio = dur / ref_dur
-                    if ratio < 0.5 or ratio > 2.0:
-                        self.filtered_files.append(fpath)
-                        continue
+                    if ratio < 0.5:
+                        reason = f"时长过短 ({dur:.1f}s / 参考 {ref_dur:.1f}s = {ratio:.0%})"
+                    elif ratio > 2.0:
+                        reason = f"时长过长 ({dur:.1f}s / 参考 {ref_dur:.1f}s = {ratio:.0%})"
 
                 # 采样率检查
-                if abs(sr - ref_sr) > 1000:
+                if not reason and abs(sr - ref_sr) > 1000:
+                    reason = f"采样率不匹配 ({sr}Hz vs 参考 {ref_sr}Hz)"
+
+                if reason:
                     self.filtered_files.append(fpath)
+                    # 写入 l1_results 作为异常可见，而不是静默丢弃
+                    self.l1_results[fpath] = {
+                        "verdict": "abnormal",
+                        "flags": ["duration_mismatch"],
+                        "details": reason,
+                        "energy": {"duration_s": dur},
+                        "vad": {"voiced_ratio": 0, "silence_gt_threshold": []},
+                        "tone": {"is_pure_tone": False, "dominant_freqs": [], "dominant_ratio": 0},
+                        "zcr": {"mean": 0},
+                        "truncation": {"is_truncated": False},
+                    }
                     continue
 
                 kept.append(fpath)

@@ -435,7 +435,7 @@ def cmd_task(args):
     import numpy as np
 
     _apply_env_defaults(args)
-    work_dir = args.work_dir or args.dir
+    work_dir = getattr(args, 'work_dir', None) or args.dir
     tm = TaskManager(work_dir)
 
     # 检查是否有可恢复的任务
@@ -618,7 +618,7 @@ def cmd_notification(args):
         return
     from .pipeline import Pipeline
 
-    work_dir = args.work_dir or args.dir
+    work_dir = getattr(args, 'work_dir', None) or args.dir
     head_seconds = getattr(args, 'head_seconds', 5.0)
 
     # 查找参考样本
