@@ -463,11 +463,15 @@ class Pipeline:
     # ─── 结果汇总 ─────────────────
 
     def get_combined_results(self) -> list[dict]:
-        """合并各阶段结果，输出统一格式"""
+        """合并各阶段结果，输出统一格式（含预过滤异常文件）"""
         results = []
-        for fpath in self.files:
-            basename = os.path.basename(fpath)
+        # 合并 self.files + l1_results 中预过滤的文件（去重）
+        all_files = list(self.files)
+        for fpath in self.l1_results:
+            if fpath not in all_files:
+                all_files.append(fpath)
 
+        for fpath in all_files:
             if fpath in self.errors:
                 results.append({
                     "file": fpath,
@@ -479,6 +483,19 @@ class Pipeline:
 
             r = self.l1_results.get(fpath)
             if not r:
+                continue
+
+            # 预过滤标记的异常（无 y/sr，直接用写好的结构）
+            if "l1" not in r:
+                results.append({
+                    "file": fpath,
+                    "duration_s": r.get("energy", {}).get("duration_s"),
+                    "l1": r,
+                    "l2": None,
+                    "l3": None,
+                    "verdict": r.get("verdict", "abnormal"),
+                    "flags": list(dict.fromkeys(r.get("flags", []))),
+                })
                 continue
 
             l1 = r["l1"]
