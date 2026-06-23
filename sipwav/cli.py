@@ -1061,7 +1061,12 @@ def cmd_interactive(args):
     print()
     print("  +-----------------------------------------------+")
     print("  |         SIP-wav 语音异常检测工具               |")
-    print("  |         v0.1.5 · 三层管线 · 样本锚定           |")
+    try:
+        from importlib.metadata import version as _get_ver
+        _ver = _get_ver("sipwav")
+    except Exception:
+        _ver = "dev"
+    print(f"  |         v{_ver} · 三层管线 · 样本锚定           |")
     print("  +-----------------------------------------------+")
     print()
     print("    1  模式 A -- 波形快速筛查（静音/纯音/截断/能量）")
