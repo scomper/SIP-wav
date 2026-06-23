@@ -157,7 +157,8 @@ class Pipeline:
         abnormal = sum(1 for r in results.values() if r["l1"]["verdict"] == "abnormal")
         print(f" {abnormal} 异常 / {_format_elapsed(elapsed)}")
 
-        self.l1_results = results
+        # 合并而非覆盖：保留预过滤写入的 duration_mismatch 异常
+        self.l1_results.update(results)
         self.phase_times["l1"] = elapsed
         return results
 
