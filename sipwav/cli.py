@@ -1229,16 +1229,16 @@ def main():
         epilog="""
 用法:
   sipcheck                    交互模式（引导选择）
-  sipcheck task --dir ./录音   命令行模式
+  sipcheck task ./录音         命令行模式
   sipcheck doctor             环境诊断
 
 示例:
-  sipcheck task --dir ./录音/ --sample ref.wav
-  sipcheck task --dir ./录音/ --silence 2
-  sipcheck task --dir ./录音/ --mode notification --sample notify.wav
+  sipcheck task ./录音/ -s ref.wav
+  sipcheck task ./录音/ -m n -s notify.wav
+  sipcheck scan ./录音/ -A aliyun -v
   sipcheck info 异常.wav
   sipcheck view 异常.wav -d 60 --open
-  sipcheck gen "您的验证码是123456" --output ref.wav
+  sipcheck gen "您的验证码是123456" -o ref.wav
         """,
     )
     # 加载 .env 文件（如存在）
@@ -1246,16 +1246,16 @@ def main():
     sub = parser.add_subparsers(dest="cmd")
 
     p_task = sub.add_parser("task", help="任务模式 — 支持中断恢复")
-    p_task.add_argument("--dir", required=True, help="待检目录")
+    p_task.add_argument("dir", nargs="?", default=".", help="待检目录 (默认当前目录)")
     p_task.add_argument("--sample", "-s", help="参考样本 WAV (样本锚定模式)")
-    p_task.add_argument("--mode", choices=["quality", "notification"], default="quality",
-                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证(头部匹配+送达度+吞字)")
+    p_task.add_argument("--mode", "-m", choices=["quality", "notification"], default="quality",
+                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证")
     p_task.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
                         help="内容匹配头部匹配秒数 (默认 5s)")
     p_task.add_argument("--asr", action=argparse.BooleanOptionalAction, default=True,
                         help="启用 ASR 内容分析 (默认开，--no-asr 关闭)")
-    p_task.add_argument("--asr-mode", choices=["local", "mlx", "aliyun", "auto"], default="auto",
-                        help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
+    p_task.add_argument("--asr-mode", "-A", choices=["local", "mlx", "aliyun", "auto"], default="auto",
+                        help="ASR 模式: local/aliyun/auto (默认 auto)")
     p_task.add_argument("--asr-model", default=None,
                         help="云端 ASR 模型: qwen3-asr-flash-filetrans (默认) / paraformer-8k-v2 / fun-asr")
     p_task.add_argument("--phases", "-p", default="123",
@@ -1264,7 +1264,7 @@ def main():
                         help="SIP 编码: g711/g729, auto=自动检测 (默认 auto)")
     p_task.add_argument("--silence", type=float, default=2.0, metavar="SEC",
                         help="静音检测阈值（秒），超过此值才报异常 (默认 2.0)")
-    p_task.add_argument("--work-dir", "-w", help="工作目录 (默认同 --dir)")
+    p_task.add_argument("--work-dir", "-w", help="工作目录 (默认同 dir)")
     p_task.add_argument("--verbose", "-v", action="store_true", help="显示正常结果")
     p_task.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True, help="自动恢复未完成任务 (默认 true)")
 
@@ -1272,15 +1272,15 @@ def main():
     p_status.add_argument("--dir", required=True, help="工作目录")
 
     p_scan = sub.add_parser("scan", help="简单批量扫描（无任务状态）")
-    p_scan.add_argument("--dir", required=True, help="待检目录")
+    p_scan.add_argument("dir", nargs="?", default=".", help="待检目录 (默认当前目录)")
     p_scan.add_argument("--sample", "-s", help="参考样本 WAV")
-    p_scan.add_argument("--mode", choices=["quality", "notification"], default="quality",
-                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证(头部匹配+送达度+吞字)")
+    p_scan.add_argument("--mode", "-m", choices=["quality", "notification"], default="quality",
+                        help="检测模式: quality=异常检测(默认), notification=内容匹配验证")
     p_scan.add_argument("--head-seconds", type=float, default=5.0, metavar="SEC",
                         help="内容匹配头部匹配秒数 (默认 5s)")
     p_scan.add_argument("--asr", action="store_true", help="启用 ASR 内容分析")
-    p_scan.add_argument("--asr-mode", choices=["local", "mlx", "aliyun", "auto"], default="auto",
-                        help="ASR 模式: local=仅本地, aliyun=仅云端, auto=本地+回退 (默认 auto)")
+    p_scan.add_argument("--asr-mode", "-A", choices=["local", "mlx", "aliyun", "auto"], default="auto",
+                        help="ASR 模式: local/aliyun/auto (默认 auto)")
     p_scan.add_argument("--asr-model", default=None,
                         help="云端 ASR 模型: qwen3-asr-flash-filetrans (默认) / paraformer-8k-v2 / fun-asr")
     p_scan.add_argument("--silence", type=float, default=2.0, metavar="SEC",

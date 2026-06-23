@@ -32,6 +32,9 @@ server = [
     "httpx>=0.24",
 ]
 
+[tool.setuptools.packages.find]
+include = ["sipwav*"]
+
 [project.urls]
 Homepage = "https://github.com/scomper/SIP-wav"
 
