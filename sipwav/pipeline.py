@@ -174,7 +174,7 @@ class Pipeline:
         # 只比对 L1 正常且不在过滤列表中的文件
         candidates = [
             fpath for fpath, r in self.l1_results.items()
-            if r["l1"]["verdict"] == "normal" and fpath not in self.errors and fpath not in self.filtered_files
+            if r.get("l1", {}).get("verdict") == "normal" and fpath not in self.errors and fpath not in self.filtered_files
         ]
 
         # 时长预筛选：差异太大的直接跳过 DTW（省算力）
